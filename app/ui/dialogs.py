@@ -1,0 +1,644 @@
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox,
+    QPushButton, QMessageBox, QTimeEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QTextEdit, QCheckBox
+)
+from PySide6.QtCore import QTime, Qt
+from sqlalchemy.orm import Session
+from app.database import get_session
+from app.models import Teacher, Subject, Room, Semester, WorkingDay, TimeSlot, TeacherAvailability, RoomAvailability
+from app.utils.validators import is_valid_email
+from app.utils.helpers import time_to_minutes
+from app.services.conflict_service import ConflictService
+
+def show_error(parent, msg):
+    QMessageBox.critical(parent, "Error", msg)
+
+def show_info(parent, msg):
+    QMessageBox.information(parent, "Info", msg)
+
+class TeacherDialog(QDialog):
+    def __init__(self, parent=None, teacher: Teacher | None = None):
+        super().__init__(parent)
+        self.teacher = teacher
+        self.setWindowTitle("Edit Teacher" if teacher else "Add Teacher")
+        self.setMinimumWidth(420)
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.name_edit = QLineEdit(teacher.name if teacher else "")
+        self.email_edit = QLineEdit(teacher.email if teacher else "")
+        self.dept_edit = QLineEdit(teacher.department if teacher else "Computer Science")
+        self.desig_combo = QComboBox()
+        self.desig_combo.addItems(["Professor", "Associate Professor", "Assistant Professor", "Lecturer", "HOD"])
+        if teacher and teacher.designation:
+            idx = self.desig_combo.findText(teacher.designation)
+            if idx >= 0:
+                self.desig_combo.setCurrentIndex(idx)
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(["Active", "Inactive"])
+        if teacher and teacher.status:
+            self.status_combo.setCurrentText(teacher.status)
+        form.addRow("Name*:", self.name_edit)
+        form.addRow("Email:", self.email_edit)
+        form.addRow("Department:", self.dept_edit)
+        form.addRow("Designation:", self.desig_combo)
+        form.addRow("Status:", self.status_combo)
+        layout.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def accept(self):
+        if not self.name_edit.text().strip():
+            show_error(self, "Teacher name is required.")
+            return
+        if self.email_edit.text().strip() and not is_valid_email(self.email_edit.text().strip()):
+            show_error(self, "Invalid email format.")
+            return
+        super().accept()
+
+    def get_data(self):
+        return {
+            "name": self.name_edit.text().strip(),
+            "email": self.email_edit.text().strip(),
+            "department": self.dept_edit.text().strip(),
+            "designation": self.desig_combo.currentText(),
+            "status": self.status_combo.currentText()
+        }
+
+class RoomDialog(QDialog):
+    def __init__(self, parent=None, room: Room | None = None):
+        super().__init__(parent)
+        self.room = room
+        self.setWindowTitle("Edit Room/Lab" if room else "Add Room/Lab")
+        self.setMinimumWidth(420)
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.name_edit = QLineEdit(room.name if room else "")
+        self.number_edit = QLineEdit(room.room_number if room else "")
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["Classroom", "Laboratory", "Seminar Hall"])
+        if room and room.type:
+            self.type_combo.setCurrentText(room.type)
+        self.capacity_spin = QSpinBox()
+        self.capacity_spin.setRange(1, 500)
+        self.capacity_spin.setValue(room.capacity if room else 60)
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(["Available", "Unavailable", "Maintenance"])
+        if room and room.status:
+            self.status_combo.setCurrentText(room.status)
+        form.addRow("Name*:", self.name_edit)
+        form.addRow("Room Number*:", self.number_edit)
+        form.addRow("Type:", self.type_combo)
+        form.addRow("Capacity:", self.capacity_spin)
+        form.addRow("Status:", self.status_combo)
+        layout.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def accept(self):
+        if not self.name_edit.text().strip():
+            show_error(self, "Name is required.")
+            return
+        if not self.number_edit.text().strip():
+            show_error(self, "Room number is required.")
+            return
+        super().accept()
+
+    def get_data(self):
+        return {
+            "name": self.name_edit.text().strip(),
+            "room_number": self.number_edit.text().strip(),
+            "type": self.type_combo.currentText(),
+            "capacity": self.capacity_spin.value(),
+            "status": self.status_combo.currentText()
+        }
+
+class SubjectDialog(QDialog):
+    def __init__(self, parent=None, subject: Subject | None = None, session: Session | None = None):
+        super().__init__(parent)
+        self.subject = subject
+        self.session = session or get_session()
+        self.owns_session = session is None
+        self.setWindowTitle("Edit Subject" if subject else "Add Subject")
+        self.setMinimumWidth(480)
+        self.setModal(True)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.code_edit = QLineEdit(subject.code if subject else "")
+        self.name_edit = QLineEdit(subject.name if subject else "")
+        self.semester_combo = QComboBox()
+        sems = self.session.query(Semester).order_by(Semester.id).all()
+        for s in sems:
+            self.semester_combo.addItem(s.name, s.id)
+        if subject:
+            idx = self.semester_combo.findData(subject.semester_id)
+            if idx >= 0:
+                self.semester_combo.setCurrentIndex(idx)
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["Theory", "Practical", "Lab", "Tutorial"])
+        if subject and subject.subject_type:
+            self.type_combo.setCurrentText(subject.subject_type)
+        self.req_spin = QSpinBox()
+        self.req_spin.setRange(1, 10)
+        self.req_spin.setValue(subject.required_lectures_per_week if subject else 3)
+        self.dur_combo = QComboBox()
+        self.dur_combo.addItems(["30", "45", "60", "90", "120"])
+        if subject:
+            self.dur_combo.setCurrentText(str(subject.lecture_duration))
+        else:
+            self.dur_combo.setCurrentText("60")
+        self.teacher_combo = QComboBox()
+        self.teacher_combo.addItem("-- None --", None)
+        teachers = self.session.query(Teacher).filter(Teacher.status=="Active").order_by(Teacher.name).all()
+        for t in teachers:
+            self.teacher_combo.addItem(t.name, t.id)
+        if subject and subject.teacher_id:
+            idx = self.teacher_combo.findData(subject.teacher_id)
+            if idx >= 0:
+                self.teacher_combo.setCurrentIndex(idx)
+        self.room_combo = QComboBox()
+        self.room_combo.addItem("-- None --", None)
+        rooms = self.session.query(Room).filter(Room.status=="Available").order_by(Room.name).all()
+        for r in rooms:
+            self.room_combo.addItem(f"{r.name} ({r.room_number})", r.id)
+        if subject and subject.room_id:
+            idx = self.room_combo.findData(subject.room_id)
+            if idx >= 0:
+                self.room_combo.setCurrentIndex(idx)
+        form.addRow("Subject Code*:", self.code_edit)
+        form.addRow("Subject Name*:", self.name_edit)
+        form.addRow("Semester*:", self.semester_combo)
+        form.addRow("Subject Type:", self.type_combo)
+        form.addRow("Required Lectures/Week:", self.req_spin)
+        form.addRow("Lecture Duration (mins):", self.dur_combo)
+        form.addRow("Assigned Teacher:", self.teacher_combo)
+        form.addRow("Assigned Room:", self.room_combo)
+        layout.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def closeEvent(self, event):
+        if self.owns_session:
+            try:
+                self.session.close()
+            except:
+                pass
+        super().closeEvent(event)
+
+    def accept(self):
+        if not self.code_edit.text().strip():
+            show_error(self, "Subject code is required.")
+            return
+        if not self.name_edit.text().strip():
+            show_error(self, "Subject name is required.")
+            return
+        super().accept()
+
+    def get_data(self):
+        return {
+            "code": self.code_edit.text().strip(),
+            "name": self.name_edit.text().strip(),
+            "semester_id": self.semester_combo.currentData(),
+            "subject_type": self.type_combo.currentText(),
+            "required_lectures_per_week": self.req_spin.value(),
+            "lecture_duration": int(self.dur_combo.currentText()),
+            "teacher_id": self.teacher_combo.currentData(),
+            "room_id": self.room_combo.currentData(),
+            "room_requirement": "Laboratory" if self.type_combo.currentText() in ["Lab", "Practical"] else "Classroom"
+        }
+
+class LectureDialog(QDialog):
+    def __init__(self, parent=None, semester_id: int | None = None, day_id: int | None = None, start_time: str | None = None, end_time: str | None = None, entry=None):
+        super().__init__(parent)
+        self.entry = entry
+        self.setWindowTitle("Edit Lecture" if entry else "Add Lecture")
+        self.setMinimumWidth(520)
+        self.setModal(True)
+        self.session = get_session()
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        # Semester
+        self.sem_combo = QComboBox()
+        sems = self.session.query(Semester).order_by(Semester.id).all()
+        for s in sems:
+            self.sem_combo.addItem(s.name, s.id)
+        if entry:
+            idx = self.sem_combo.findData(entry.semester_id)
+            if idx >= 0:
+                self.sem_combo.setCurrentIndex(idx)
+        elif semester_id:
+            idx = self.sem_combo.findData(semester_id)
+            if idx >= 0:
+                self.sem_combo.setCurrentIndex(idx)
+        # Subject - filtered by semester
+        self.subj_combo = QComboBox()
+        self._populate_subjects()
+        self.sem_combo.currentIndexChanged.connect(self._populate_subjects)
+        self.subj_combo.currentIndexChanged.connect(self._on_subject_changed)
+        if entry:
+            idx = self.subj_combo.findData(entry.subject_id)
+            if idx >= 0:
+                self.subj_combo.setCurrentIndex(idx)
+            # Ensure auto teacher/room for existing entry is already set, but trigger to sync type
+            self._on_subject_changed()
+        else:
+            # For new lecture, auto-select teacher/room of first subject
+            self._on_subject_changed()
+        # Teacher
+        self.teacher_combo = QComboBox()
+        teachers = self.session.query(Teacher).filter(Teacher.status=="Active").order_by(Teacher.name).all()
+        for t in teachers:
+            self.teacher_combo.addItem(t.name, t.id)
+        if entry:
+            idx = self.teacher_combo.findData(entry.teacher_id)
+            if idx >= 0:
+                self.teacher_combo.setCurrentIndex(idx)
+        # Room
+        self.room_combo = QComboBox()
+        rooms = self.session.query(Room).filter(Room.status=="Available").order_by(Room.name).all()
+        for r in rooms:
+            self.room_combo.addItem(f"{r.name} ({r.room_number}) - {r.type}", r.id)
+        if entry:
+            idx = self.room_combo.findData(entry.room_id)
+            if idx >= 0:
+                self.room_combo.setCurrentIndex(idx)
+        # Day
+        self.day_combo = QComboBox()
+        days = self.session.query(WorkingDay).filter(WorkingDay.is_enabled==True).order_by(WorkingDay.sort_order).all()
+        for d in days:
+            self.day_combo.addItem(d.name, d.id)
+        if entry:
+            idx = self.day_combo.findData(entry.day_id)
+            if idx >= 0:
+                self.day_combo.setCurrentIndex(idx)
+        elif day_id:
+            idx = self.day_combo.findData(day_id)
+            if idx >= 0:
+                self.day_combo.setCurrentIndex(idx)
+        # Time
+        self.start_edit = QTimeEdit()
+        self.start_edit.setDisplayFormat("HH:mm")
+        self.end_edit = QTimeEdit()
+        self.end_edit.setDisplayFormat("HH:mm")
+        if entry:
+            sh, sm = map(int, entry.start_time.split(":"))
+            eh, em = map(int, entry.end_time.split(":"))
+            self.start_edit.setTime(QTime(sh, sm))
+            self.end_edit.setTime(QTime(eh, em))
+        else:
+            if start_time:
+                sh, sm = map(int, start_time.split(":"))
+                self.start_edit.setTime(QTime(sh, sm))
+            else:
+                self.start_edit.setTime(QTime(9, 0))
+            if end_time:
+                eh, em = map(int, end_time.split(":"))
+                self.end_edit.setTime(QTime(eh, em))
+            else:
+                self.end_edit.setTime(QTime(10, 0))
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["Theory", "Practical", "Lab", "Tutorial"])
+        if entry and entry.lecture_type:
+            self.type_combo.setCurrentText(entry.lecture_type)
+
+        form.addRow("Semester*:", self.sem_combo)
+        form.addRow("Subject*:", self.subj_combo)
+        form.addRow("Teacher*:", self.teacher_combo)
+        form.addRow("Room/Lab*:", self.room_combo)
+        form.addRow("Day*:", self.day_combo)
+        form.addRow("Start Time*:", self.start_edit)
+        form.addRow("End Time*:", self.end_edit)
+        form.addRow("Lecture Type:", self.type_combo)
+        layout.addLayout(form)
+
+        # Info label for suggestions
+        self.info_label = QLabel("")
+        self.info_label.setWordWrap(True)
+        self.info_label.setStyleSheet("color: #DC2626; font-size: 11px;")
+        layout.addWidget(self.info_label)
+
+        btn_layout = QHBoxLayout()
+        self.find_btn = QPushButton("Find Available Slot")
+        self.find_btn.setObjectName("SecondaryButton")
+        self.find_btn.clicked.connect(self.find_slots)
+        btn_layout.addWidget(self.find_btn)
+        btn_layout.addStretch()
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        btn_layout.addWidget(btns)
+        layout.addLayout(btn_layout)
+
+    def _populate_subjects(self):
+        sem_id = self.sem_combo.currentData()
+        self.subj_combo.blockSignals(True)
+        self.subj_combo.clear()
+        if sem_id is None:
+            self.subj_combo.blockSignals(False)
+            return
+        try:
+            subjects = self.session.query(Subject).filter(Subject.semester_id==sem_id).order_by(Subject.name).all()
+            for s in subjects:
+                self.subj_combo.addItem(f"{s.code} - {s.name}", s.id)
+        except:
+            pass
+        self.subj_combo.blockSignals(False)
+        # Auto-select teacher/room for first subject if not editing
+        if not self.entry and self.subj_combo.count() > 0:
+            self._on_subject_changed()
+
+    def _on_subject_changed(self, idx=None):
+        # Auto-select teacher/room/type when subject changes — specific, no manual teacher pick needed
+        subj_id = self.subj_combo.currentData()
+        if not subj_id:
+            return
+        try:
+            subj = self.session.query(Subject).filter(Subject.id==subj_id).first()
+            if not subj:
+                return
+            # Only auto-set if not editing existing lecture? For edit, still sync but allow override — we auto-set every time for simplicity
+            if subj.teacher_id:
+                ti = self.teacher_combo.findData(subj.teacher_id)
+                if ti >= 0:
+                    self.teacher_combo.blockSignals(True)
+                    self.teacher_combo.setCurrentIndex(ti)
+                    self.teacher_combo.blockSignals(False)
+            if subj.room_id:
+                ri = self.room_combo.findData(subj.room_id)
+                if ri >= 0:
+                    self.room_combo.blockSignals(True)
+                    self.room_combo.setCurrentIndex(ri)
+                    self.room_combo.blockSignals(False)
+            # Map subject type to lecture type
+            if subj.subject_type:
+                lt = subj.subject_type
+                # Normalize: subject Lab -> Lab, Practical -> Practical
+                idx_lt = self.type_combo.findText(lt)
+                if idx_lt >= 0:
+                    self.type_combo.blockSignals(True)
+                    self.type_combo.setCurrentIndex(idx_lt)
+                    self.type_combo.blockSignals(False)
+            # Auto set end time based on subject lecture_duration for new entries
+            if not self.entry and subj.lecture_duration:
+                try:
+                    start = self.start_edit.time()
+                    dur = int(subj.lecture_duration)
+                    end = start.addSecs(dur * 60)
+                    self.end_edit.blockSignals(True)
+                    self.end_edit.setTime(end)
+                    self.end_edit.blockSignals(False)
+                    self.info_label.setText(f"Auto: {subj.code} → {subj.name} | Teacher: {self.teacher_combo.currentText()} | Room: {self.room_combo.currentText()} | Duration: {dur} min")
+                    self.info_label.setStyleSheet("color: #065F46; font-size: 11px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px;")
+                except:
+                    pass
+            else:
+                # For edit, just show hint
+                self.info_label.setText(f"Selected: {subj.code} — {subj.name} | Auto teacher: {self.teacher_combo.currentText()}")
+                self.info_label.setStyleSheet("color: #334155; font-size: 11px;")
+        except Exception:
+            pass
+
+    def find_slots(self):
+        sem_id = self.sem_combo.currentData()
+        teacher_id = self.teacher_combo.currentData()
+        room_id = self.room_combo.currentData()
+        if not all([sem_id, teacher_id, room_id]):
+            self.info_label.setText("Please select semester, teacher and room to find slots.")
+            return
+        # duration from time edits
+        st = self.start_edit.time()
+        et = self.end_edit.time()
+        dur = (et.hour()*60+et.minute()) - (st.hour()*60+st.minute())
+        if dur <= 0:
+            dur = 60
+        from app.services.conflict_service import ConflictService
+        slots = ConflictService.find_available_slots(self.session, sem_id, teacher_id, room_id, dur)
+        if not slots:
+            self.info_label.setText("No available slots found for the selected criteria.")
+            return
+        # Show top 5
+        txt = "Available: " + ", ".join([f"{s['day_name']} {s['start_time']}-{s['end_time']}" for s in slots[:5]])
+        self.info_label.setText(txt)
+        # Also popup
+        msg = "\n".join([f"✓ {s['day_name']} {s['start_time']}-{s['end_time']}" for s in slots[:8]])
+        QMessageBox.information(self, "Available Slots", msg)
+
+    def accept(self):
+        # Basic validation
+        sem_id = self.sem_combo.currentData()
+        subj_id = self.subj_combo.currentData()
+        teacher_id = self.teacher_combo.currentData()
+        room_id = self.room_combo.currentData()
+        day_id = self.day_combo.currentData()
+        start = self.start_edit.time().toString("HH:mm")
+        end = self.end_edit.time().toString("HH:mm")
+        if not all([sem_id, subj_id, teacher_id, room_id, day_id]):
+            show_error(self, "All fields are required.")
+            return
+        # Time validation
+        try:
+            s = time_to_minutes(start)
+            e = time_to_minutes(end)
+            if e <= s:
+                show_error(self, "End time must be after start time.")
+                return
+        except Exception as ex:
+            show_error(self, str(ex))
+            return
+        # Check conflicts (if editing, exclude self)
+        exclude = self.entry.id if self.entry else None
+        conflicts = ConflictService.validate_all(self.session, sem_id, subj_id, teacher_id, room_id, day_id, start, end, exclude_id=exclude)
+        has = [c for c in conflicts if c.has_conflict]
+        if has:
+            msgs = "\n\n".join([f"❌ {c.message}" for c in has])
+            # Suggest alternatives
+            try:
+                dur = time_to_minutes(end) - time_to_minutes(start)
+                suggestions = ConflictService.suggest_alternative_slots(self.session, sem_id, teacher_id, room_id, dur, day_id=day_id, limit=5)
+                if suggestions:
+                    msgs += "\n\nSuggested alternatives:\n" + "\n".join([f"✓ {s['day_name']} {s['start_time']}-{s['end_time']}" for s in suggestions])
+            except:
+                pass
+            QMessageBox.critical(self, "Conflict Detected", msgs)
+            return
+        super().accept()
+
+    def get_data(self):
+        return {
+            "semester_id": self.sem_combo.currentData(),
+            "subject_id": self.subj_combo.currentData(),
+            "teacher_id": self.teacher_combo.currentData(),
+            "room_id": self.room_combo.currentData(),
+            "day_id": self.day_combo.currentData(),
+            "start_time": self.start_edit.time().toString("HH:mm"),
+            "end_time": self.end_edit.time().toString("HH:mm"),
+            "lecture_type": self.type_combo.currentText()
+        }
+
+    def closeEvent(self, event):
+        try:
+            self.session.close()
+        except:
+            pass
+        super().closeEvent(event)
+
+class TimeSlotDialog(QDialog):
+    def __init__(self, parent=None, slot: TimeSlot | None = None):
+        super().__init__(parent)
+        self.slot = slot
+        self.setWindowTitle("Edit Time Slot" if slot else "Add Time Slot")
+        self.setMinimumWidth(380)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.start_edit = QTimeEdit()
+        self.start_edit.setDisplayFormat("HH:mm")
+        self.end_edit = QTimeEdit()
+        self.end_edit.setDisplayFormat("HH:mm")
+        if slot:
+            sh, sm = map(int, slot.start_time.split(":"))
+            eh, em = map(int, slot.end_time.split(":"))
+            self.start_edit.setTime(QTime(sh, sm))
+            self.end_edit.setTime(QTime(eh, em))
+        else:
+            self.start_edit.setTime(QTime(8, 0))
+            self.end_edit.setTime(QTime(9, 0))
+        self.is_break_check = QCheckBox("Is Break")
+        self.is_break_check.setChecked(slot.is_break if slot else False)
+        self.break_name_edit = QLineEdit(slot.break_name if slot and slot.break_name else "")
+        self.break_name_edit.setPlaceholderText("e.g., Lunch Break")
+        form.addRow("Start Time:", self.start_edit)
+        form.addRow("End Time:", self.end_edit)
+        form.addRow("", self.is_break_check)
+        form.addRow("Break Name:", self.break_name_edit)
+        layout.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def accept(self):
+        s = self.start_edit.time().toString("HH:mm")
+        e = self.end_edit.time().toString("HH:mm")
+        try:
+            if time_to_minutes(e) <= time_to_minutes(s):
+                show_error(self, "End time must be after start time.")
+                return
+        except Exception as ex:
+            show_error(self, str(ex))
+            return
+        if self.is_break_check.isChecked() and not self.break_name_edit.text().strip():
+            show_error(self, "Break name is required when Is Break is checked.")
+            return
+        super().accept()
+
+    def get_data(self):
+        s = self.start_edit.time().toString("HH:mm")
+        e = self.end_edit.time().toString("HH:mm")
+        is_break = self.is_break_check.isChecked()
+        label = f"{s}-{e}" + (f" ({self.break_name_edit.text().strip()})" if is_break else "")
+        return {
+            "start_time": s,
+            "end_time": e,
+            "label": label,
+            "is_break": is_break,
+            "break_name": self.break_name_edit.text().strip() if is_break else "",
+            "is_enabled": True
+        }
+
+class AvailabilityDialog(QDialog):
+    def __init__(self, parent=None, teacher_id=None, room_id=None, existing=None, is_teacher=True):
+        super().__init__(parent)
+        self.is_teacher = is_teacher
+        self.existing = existing
+        self.setWindowTitle("Edit Unavailability" if existing else ("Add Teacher Unavailability" if is_teacher else "Add Room Unavailability"))
+        self.setMinimumWidth(420)
+        self.session = get_session()
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.entity_combo = QComboBox()
+        if is_teacher:
+            teachers = self.session.query(Teacher).order_by(Teacher.name).all()
+            for t in teachers:
+                self.entity_combo.addItem(t.name, t.id)
+            if teacher_id:
+                idx = self.entity_combo.findData(teacher_id)
+                if idx >= 0:
+                    self.entity_combo.setCurrentIndex(idx)
+            elif existing:
+                idx = self.entity_combo.findData(existing.teacher_id)
+                if idx >= 0:
+                    self.entity_combo.setCurrentIndex(idx)
+        else:
+            rooms = self.session.query(Room).order_by(Room.name).all()
+            for r in rooms:
+                self.entity_combo.addItem(f"{r.name} ({r.room_number})", r.id)
+            if room_id:
+                idx = self.entity_combo.findData(room_id)
+                if idx >= 0:
+                    self.entity_combo.setCurrentIndex(idx)
+            elif existing:
+                idx = self.entity_combo.findData(existing.room_id)
+                if idx >= 0:
+                    self.entity_combo.setCurrentIndex(idx)
+        self.day_combo = QComboBox()
+        days = self.session.query(WorkingDay).order_by(WorkingDay.sort_order).all()
+        for d in days:
+            self.day_combo.addItem(d.name, d.id)
+        if existing:
+            idx = self.day_combo.findData(existing.day_id)
+            if idx >= 0:
+                self.day_combo.setCurrentIndex(idx)
+        self.start_edit = QTimeEdit()
+        self.start_edit.setDisplayFormat("HH:mm")
+        self.end_edit = QTimeEdit()
+        self.end_edit.setDisplayFormat("HH:mm")
+        if existing:
+            sh, sm = map(int, existing.start_time.split(":"))
+            eh, em = map(int, existing.end_time.split(":"))
+            self.start_edit.setTime(QTime(sh, sm))
+            self.end_edit.setTime(QTime(eh, em))
+        else:
+            self.start_edit.setTime(QTime(9, 0))
+            self.end_edit.setTime(QTime(11, 0))
+        self.reason_edit = QLineEdit(existing.reason if existing and existing.reason else "")
+        form.addRow("Teacher:" if is_teacher else "Room/Lab:", self.entity_combo)
+        form.addRow("Day:", self.day_combo)
+        form.addRow("Start:", self.start_edit)
+        form.addRow("End:", self.end_edit)
+        form.addRow("Reason:", self.reason_edit)
+        layout.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def accept(self):
+        s = self.start_edit.time().toString("HH:mm")
+        e = self.end_edit.time().toString("HH:mm")
+        if time_to_minutes(e) <= time_to_minutes(s):
+            show_error(self, "End time must be after start time.")
+            return
+        super().accept()
+
+    def get_data(self):
+        return {
+            "entity_id": self.entity_combo.currentData(),
+            "day_id": self.day_combo.currentData(),
+            "start_time": self.start_edit.time().toString("HH:mm"),
+            "end_time": self.end_edit.time().toString("HH:mm"),
+            "reason": self.reason_edit.text().strip()
+        }
+
+    def closeEvent(self, event):
+        try:
+            self.session.close()
+        except:
+            pass
+        super().closeEvent(event)

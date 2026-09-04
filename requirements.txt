@@ -1,0 +1,6 @@
+PySide6
+SQLAlchemy
+openpyxl
+reportlab
+pytest
+pyinstaller
