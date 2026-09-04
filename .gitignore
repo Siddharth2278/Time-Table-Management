@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+*.egg-info/
+
+# SQLite / Database
+*.db
+*.sqlite
+*.sqlite3
+*.mv.db
+*.trace.db
+timetable.db
+
+# Build / Dist
+build/
+dist/
+*.spec
+!CollegeTimetable.spec
+*.manifest
+*.pyinstaller/
+
+# Large files
+*.zip
+CAMPUSOS_PLAN.zip
+*.exe
+!installer/*.iss
+CollegeTimetableSetup.exe
+CollegeTimetableSetup-*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node (if any)
+node_modules/
+.next/
+out/
