@@ -7,7 +7,7 @@ from app.services.conflict_service import ConflictService, ConflictResult
 class TimetableService:
 
     @staticmethod
-    def create_entry(session: Session, semester_id: int, subject_id: int, teacher_id: int, room_id: int, day_id: int, start_time: str, end_time: str, lecture_type: str = "Theory", academic_year: str = "2026-27", check_subject_limit: bool = False) -> tuple[bool, List[ConflictResult] | TimetableEntry]:
+    def create_entry(session: Session, semester_id: int, subject_id: int, teacher_id: int, room_id: int, day_id: int, start_time: str, end_time: str, lecture_type: str = "Theory", academic_year: str = "2026-27", check_subject_limit: bool = True) -> tuple[bool, List[ConflictResult] | TimetableEntry]:
         # Validate required fields
         if not all([semester_id, subject_id, teacher_id, room_id, day_id, start_time, end_time]):
             return False, [ConflictResult(True, "validation", "All fields are required.")]
