@@ -54,7 +54,7 @@ class TimetableService:
         if not day or not day.is_enabled:
             return False, [ConflictResult(True, "validation", f"Selected day {(day.name if day else day_id)} is not a working day.")]
 
-        conflicts = ConflictService.validate_all(session, semester_id, subject_id, teacher_id, room_id, day_id, start_time, end_time, exclude_id=entry_id, check_subject_limit=False)
+        conflicts = ConflictService.validate_all(session, semester_id, subject_id, teacher_id, room_id, day_id, start_time, end_time, exclude_id=entry_id, check_subject_limit=True)
         has = [c for c in conflicts if c.has_conflict]
         if has:
             return False, has

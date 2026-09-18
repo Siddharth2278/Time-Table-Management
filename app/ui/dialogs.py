@@ -460,7 +460,7 @@ class LectureDialog(QDialog):
             return
         # Check conflicts (if editing, exclude self)
         exclude = self.entry.id if self.entry else None
-        conflicts = ConflictService.validate_all(self.session, sem_id, subj_id, teacher_id, room_id, day_id, start, end, exclude_id=exclude)
+        conflicts = ConflictService.validate_all(self.session, sem_id, subj_id, teacher_id, room_id, day_id, start, end, exclude_id=exclude, check_subject_limit=True)
         has = [c for c in conflicts if c.has_conflict]
         if has:
             msgs = "\n\n".join([f"❌ {c.message}" for c in has])
