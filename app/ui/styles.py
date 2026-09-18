@@ -316,6 +316,34 @@ QToolTip {
     padding: 6px 10px;
     font-size: 12px;
 }
+
+/* App shell refinements */
+QMainWindow { background: #EEF2F6; }
+QWidget#Sidebar { background: #132A3A; border-right: 1px solid #0D1F2B; }
+QWidget#Sidebar QPushButton { min-height: 38px; padding: 9px 12px; border-radius: 6px; color: #AFC1CC; margin: 2px 3px; }
+QWidget#Sidebar QPushButton:hover { background: #1E4154; color: #FFFFFF; }
+QWidget#Sidebar QPushButton:checked { background: #1F8A70; color: #FFFFFF; border-left: 3px solid #F2B880; padding-left: 9px; }
+QWidget#Header { background: #FFFFFF; border-bottom: 1px solid #D7E0E7; }
+QLabel#HeaderTitle { font-size: 18px; font-weight: 800; color: #132A3A; }
+QLabel#HeaderSub { color: #70808B; font-size: 12px; }
+QPushButton { min-height: 34px; border-radius: 6px; padding: 7px 14px; }
+QPushButton#PrimaryButton { background: #1F8A70; border: 1px solid #176B57; color: #FFFFFF; }
+QPushButton#PrimaryButton:hover { background: #176B57; }
+QPushButton#SecondaryButton { background: #FFFFFF; border: 1px solid #B8C7D0; color: #274554; }
+QPushButton#SecondaryButton:hover { background: #E8F3F0; border-color: #6BB19D; }
+QPushButton#DangerButton { background: #C94D4D; border: 1px solid #A53B3B; color: #FFFFFF; }
+QPushButton#DangerButton:hover { background: #A53B3B; }
+QTableWidget { border: 1px solid #D3DEE5; border-radius: 8px; background: #FFFFFF; alternate-background-color: #F7FAFB; selection-background-color: #D9EEE8; selection-color: #163D34; }
+QHeaderView::section { background: #23485A; color: #FFFFFF; padding: 10px 8px; font-size: 11px; font-weight: 700; border: none; }
+QGroupBox { border: 1px solid #D3DEE5; border-radius: 8px; background: #FFFFFF; padding: 18px 14px 14px; }
+QGroupBox::title { background: #23485A; color: #FFFFFF; border-radius: 4px; padding: 4px 9px; left: 12px; }
+QDialog { background: #F7FAFB; }
+QDialog QLabel { color: #29424F; }
+QDialogButtonBox QPushButton { min-width: 88px; }
+QMessageBox { background: #FFFFFF; }
+QMessageBox QLabel { color: #172F3D; font-size: 13px; }
+QProgressBar::chunk { background: #1F8A70; }
+QToolTip { background: #132A3A; color: #FFFFFF; border: 1px solid #416477; }
 """
 
 # Dark theme - polished
