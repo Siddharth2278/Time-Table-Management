@@ -1,11 +1,12 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
+    QTableWidgetItem, QHeaderView, QMessageBox, QTabWidget
 )
 from PySide6.QtCore import Qt
 from app.database import get_session
-from app.models import TeacherAvailability, Teacher, WorkingDay
+from app.models import TeacherAvailability, RoomAvailability
 from app.ui.dialogs import AvailabilityDialog
+
 
 class AvailabilityView(QWidget):
     def __init__(self):
@@ -14,162 +15,171 @@ class AvailabilityView(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
 
-        title = QLabel("Teacher Availability")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #0F172A;")
+        title = QLabel("Availability")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #132A3A;")
         layout.addWidget(title)
-        sub = QLabel("Mark when a teacher is unavailable (e.g., leave, meeting). Room availability is automatic — if a room is booked for a lecture, the system will block overlapping bookings and show a conflict.")
+        sub = QLabel("Mark teacher or room/lab periods as unavailable. Timetable validation blocks lectures that overlap these periods.")
         sub.setStyleSheet("color: #64748B; font-size: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px;")
         sub.setWordWrap(True)
         layout.addWidget(sub)
 
-        btns = QHBoxLayout()
-        self.add_btn = QPushButton("＋ Add Teacher Unavailability")
+        self.tabs = QTabWidget()
+        self.teacher_table = self._make_table("Teacher")
+        self.room_table = self._make_table("Room/Lab")
+        self.tabs.addTab(self.teacher_table, "Teachers")
+        self.tabs.addTab(self.room_table, "Rooms & Labs")
+        self.tabs.currentChanged.connect(lambda _: self.load_current())
+        layout.addWidget(self.tabs, 1)
+
+        buttons = QHBoxLayout()
+        self.add_btn = QPushButton("＋ Add Unavailability")
         self.add_btn.setObjectName("PrimaryButton")
-        self.add_btn.clicked.connect(self.add_teacher_avail)
-        btns.addWidget(self.add_btn)
+        self.add_btn.clicked.connect(self.add_current)
+        buttons.addWidget(self.add_btn)
         self.edit_btn = QPushButton("Edit")
         self.edit_btn.setObjectName("SecondaryButton")
-        self.edit_btn.clicked.connect(self.edit_teacher_avail)
-        btns.addWidget(self.edit_btn)
-        self.del_btn = QPushButton("Delete")
-        self.del_btn.setObjectName("DangerButton")
-        self.del_btn.clicked.connect(self.delete_teacher_avail)
-        btns.addWidget(self.del_btn)
-        btns.addStretch()
-        hint = QLabel("Room is auto-checked — no need to mark room unavailability.")
-        hint.setStyleSheet("color: #64748B; font-size: 11px;")
-        btns.addWidget(hint)
-        layout.addLayout(btns)
+        self.edit_btn.clicked.connect(self.edit_current)
+        buttons.addWidget(self.edit_btn)
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.setObjectName("DangerButton")
+        self.delete_btn.clicked.connect(self.delete_current)
+        buttons.addWidget(self.delete_btn)
+        buttons.addStretch()
+        layout.addLayout(buttons)
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["ID", "Teacher", "Day", "Time", "Reason"])
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.setColumnWidth(0, 60)
-        self.table.verticalHeader().setVisible(False)
-        layout.addWidget(self.table)
+    def _make_table(self, entity_label):
+        table = QTableWidget(0, 5)
+        table.setHorizontalHeaderLabels(["ID", entity_label, "Day", "Time", "Reason"])
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setSelectionMode(QTableWidget.SingleSelection)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setAlternatingRowColors(True)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        table.setColumnWidth(0, 60)
+        table.verticalHeader().setVisible(False)
+        table.cellDoubleClicked.connect(lambda _row, _column: self.edit_current())
+        return table
 
     def refresh(self):
-        self.load_teacher()
+        self.load_current()
+
+    def load_current(self):
+        if self.tabs.currentIndex() == 0:
+            self.load_teacher()
+        else:
+            self.load_room()
+
+    def _fill_table(self, table, records, label_getter):
+        table.clearContents()
+        table.setRowCount(len(records) or 1)
+        for row, availability in enumerate(records):
+            values = [str(availability.id), label_getter(availability), availability.day.name if availability.day else str(availability.day_id), f"{availability.start_time}-{availability.end_time}", availability.reason or ""]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, availability.id)
+                table.setItem(row, column, item)
+        if not records:
+            empty = QTableWidgetItem("No unavailable periods configured.")
+            empty.setForeground(Qt.gray)
+            table.setItem(0, 1, empty)
+            table.setSpan(0, 1, 1, 4)
 
     def load_teacher(self):
         session = get_session()
         try:
-            avs = session.query(TeacherAvailability).order_by(TeacherAvailability.teacher_id).all()
-            self.table.setRowCount(len(avs))
-            for r, av in enumerate(avs):
-                self.table.setItem(r, 0, QTableWidgetItem(str(av.id)))
-                self.table.setItem(r, 1, QTableWidgetItem(av.teacher.name if av.teacher else str(av.teacher_id)))
-                self.table.setItem(r, 2, QTableWidgetItem(av.day.name if av.day else str(av.day_id)))
-                self.table.setItem(r, 3, QTableWidgetItem(f"{av.start_time}-{av.end_time}"))
-                self.table.setItem(r, 4, QTableWidgetItem(av.reason or ""))
-                for c in range(5):
-                    it = self.table.item(r, c)
-                    if it:
-                        it.setData(Qt.UserRole, av.id)
-            if len(avs) == 0:
-                self.table.setRowCount(1)
-                empty = QTableWidgetItem("No teacher unavailability — all teachers are available. Add only if needed.")
-                empty.setFlags(empty.flags() & ~Qt.ItemIsEditable)
-                empty.setForeground(Qt.gray)
-                self.table.setItem(0, 1, empty)
-                self.table.setSpan(0, 1, 1, 4)
+            records = session.query(TeacherAvailability).order_by(TeacherAvailability.teacher_id).all()
+            self._fill_table(self.teacher_table, records, lambda item: item.teacher.name if item.teacher else str(item.teacher_id))
+        finally:
+            session.close()
+
+    def load_room(self):
+        session = get_session()
+        try:
+            records = session.query(RoomAvailability).order_by(RoomAvailability.room_id).all()
+            self._fill_table(self.room_table, records, lambda item: item.room.name if item.room else str(item.room_id))
         finally:
             session.close()
 
     def _selected_id(self):
-        row = self.table.currentRow()
-        if row < 0:
+        table = self.teacher_table if self.tabs.currentIndex() == 0 else self.room_table
+        row = table.currentRow()
+        if row < 0 or not table.item(row, 0):
             return None
-        item = self.table.item(row, 0)
-        try:
-            return int(item.text()) if item and item.text().isdigit() else None
-        except:
-            return None
+        value = table.item(row, 0).text()
+        return int(value) if value.isdigit() else None
 
-    def add_teacher_avail(self):
-        dlg = AvailabilityDialog(self, is_teacher=True)
-        if dlg.exec():
-            data = dlg.get_data()
+    def add_current(self):
+        is_teacher = self.tabs.currentIndex() == 0
+        dialog = AvailabilityDialog(self, is_teacher=is_teacher)
+        if dialog.exec():
+            data = dialog.get_data()
             session = get_session()
             try:
-                av = TeacherAvailability(teacher_id=data["entity_id"], day_id=data["day_id"], start_time=data["start_time"], end_time=data["end_time"], is_unavailable=True, reason=data["reason"])
-                session.add(av)
+                model = TeacherAvailability if is_teacher else RoomAvailability
+                field = "teacher_id" if is_teacher else "room_id"
+                session.add(model(**{field: data["entity_id"], "day_id": data["day_id"], "start_time": data["start_time"], "end_time": data["end_time"], "is_unavailable": True, "reason": data["reason"]}))
                 session.commit()
-                QMessageBox.information(self, "Added", "Teacher unavailability marked. Timetable will block this slot.")
-                self.load_teacher()
-            except Exception as e:
+                self.load_current()
+                QMessageBox.information(self, "Saved", "Unavailable period saved. Timetable validation will block this time.")
+            except Exception as exc:
                 session.rollback()
-                QMessageBox.critical(self, "Error", str(e))
+                QMessageBox.critical(self, "Error", str(exc))
             finally:
                 session.close()
-                try:
-                    dlg.session.close()
-                except:
-                    pass
 
-    def edit_teacher_avail(self):
-        aid = self._selected_id()
-        if not aid:
-            QMessageBox.warning(self, "Select", "Please select an entry to edit.")
+    def edit_current(self):
+        is_teacher = self.tabs.currentIndex() == 0
+        record_id = self._selected_id()
+        if not record_id:
+            QMessageBox.warning(self, "Select", "Please select an unavailable period to edit.")
             return
+        model = TeacherAvailability if is_teacher else RoomAvailability
+        field = "teacher_id" if is_teacher else "room_id"
         session = get_session()
         try:
-            av = session.query(TeacherAvailability).filter(TeacherAvailability.id==aid).first()
-            if not av:
+            record = session.query(model).filter(model.id == record_id).first()
+            if not record:
                 return
-            dlg = AvailabilityDialog(self, existing=av, is_teacher=True)
-            session.expunge(av)
+            dialog = AvailabilityDialog(self, existing=record, is_teacher=is_teacher)
+            session.expunge(record)
+        finally:
             session.close()
-            if dlg.exec():
-                data = dlg.get_data()
-                s2 = get_session()
-                try:
-                    av2 = s2.query(TeacherAvailability).filter(TeacherAvailability.id==aid).first()
-                    av2.teacher_id = data["entity_id"]
-                    av2.day_id = data["day_id"]
-                    av2.start_time = data["start_time"]
-                    av2.end_time = data["end_time"]
-                    av2.reason = data["reason"]
-                    s2.commit()
-                    QMessageBox.information(self, "Updated", "Updated.")
-                    self.load_teacher()
-                except Exception as e:
-                    s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
-                finally:
-                    s2.close()
-                    try:
-                        dlg.session.close()
-                    except:
-                        pass
-        except Exception as e:
+        if dialog.exec():
+            data = dialog.get_data()
+            session = get_session()
             try:
+                record = session.query(model).filter(model.id == record_id).first()
+                setattr(record, field, data["entity_id"])
+                record.day_id = data["day_id"]
+                record.start_time = data["start_time"]
+                record.end_time = data["end_time"]
+                record.reason = data["reason"]
+                session.commit()
+                self.load_current()
+            except Exception as exc:
+                session.rollback()
+                QMessageBox.critical(self, "Error", str(exc))
+            finally:
                 session.close()
-            except:
-                pass
-            QMessageBox.critical(self, "Error", str(e))
 
-    def delete_teacher_avail(self):
-        aid = self._selected_id()
-        if not aid:
-            QMessageBox.warning(self, "Select", "Please select an entry to delete.")
+    def delete_current(self):
+        record_id = self._selected_id()
+        if not record_id:
+            QMessageBox.warning(self, "Select", "Please select an unavailable period to delete.")
             return
-        if QMessageBox.question(self, "Confirm", "Delete this unavailability?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if QMessageBox.question(self, "Confirm", "Delete this unavailable period?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
+        model = TeacherAvailability if self.tabs.currentIndex() == 0 else RoomAvailability
         session = get_session()
         try:
-            av = session.query(TeacherAvailability).filter(TeacherAvailability.id==aid).first()
-            if av:
-                session.delete(av)
+            record = session.query(model).filter(model.id == record_id).first()
+            if record:
+                session.delete(record)
                 session.commit()
-                self.load_teacher()
-        except Exception as e:
+                self.load_current()
+        except Exception as exc:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, "Error", str(exc))
         finally:
             session.close()
