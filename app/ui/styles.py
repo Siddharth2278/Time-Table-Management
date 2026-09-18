@@ -344,6 +344,16 @@ QMessageBox { background: #FFFFFF; }
 QMessageBox QLabel { color: #172F3D; font-size: 13px; }
 QProgressBar::chunk { background: #1F8A70; }
 QToolTip { background: #132A3A; color: #FFFFFF; border: 1px solid #416477; }
+QWidget { font-family: "Segoe UI"; font-size: 13px; }
+QMainWindow { background: #F3F6F8; }
+QFrame#Header { padding: 0 4px; }
+QLabel#HeaderTitle { font-size: 19px; letter-spacing: 0.1px; }
+QLabel#HeaderSub { padding-left: 8px; }
+QTableWidget { font-size: 12px; border-radius: 6px; }
+QTableWidget::item { padding: 8px; }
+QLineEdit, QComboBox, QSpinBox, QTimeEdit { min-height: 30px; }
+QPushButton#PrimaryButton, QPushButton#SecondaryButton, QPushButton#DangerButton { min-height: 34px; }
+QScrollArea { background: transparent; }
 """
 
 # Dark theme - polished

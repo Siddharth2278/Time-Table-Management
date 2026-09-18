@@ -36,7 +36,7 @@ class Sidebar(QFrame):
     def __init__(self, on_select):
         super().__init__()
         self.setObjectName("Sidebar")
-        self.setFixedWidth(176)
+        self.setFixedWidth(216)
         self.on_select = on_select
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 10, 8, 10)
@@ -84,7 +84,7 @@ class Sidebar(QFrame):
                 btn.setStyleSheet("text-align: center; padding: 8px 4px;")
             self.foot.hide()
         else:
-            self.setFixedWidth(176)
+            self.setFixedWidth(216)
             self.logo.setText("College Timetable")
             self.logo.setStyleSheet("color: white; font-size: 13px; font-weight: 800; padding: 4px 6px 8px 6px;")
             for key, btn in self.buttons.items():
@@ -107,7 +107,7 @@ class Header(QFrame):
     def __init__(self, toggle_callback=None):
         super().__init__()
         self.setObjectName("Header")
-        self.setFixedHeight(48)
+        self.setFixedHeight(58)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(10)
