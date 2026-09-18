@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QColor, QAction
 from app.database import get_session
-from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot
+from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
 from app.services.timetable_service import TimetableService
 from app.services.conflict_service import ConflictService
 from app.services.export_service import export_csv, export_excel, export_pdf
@@ -47,6 +47,14 @@ class TimetableView(QWidget):
         self.del_btn.setObjectName("DangerButton")
         self.del_btn.clicked.connect(self.delete_lecture)
         actions.addWidget(self.del_btn)
+        self.generate_btn = QPushButton("Generate Timetable")
+        self.generate_btn.setObjectName("PrimaryButton")
+        self.generate_btn.clicked.connect(self.generate_timetable)
+        actions.addWidget(self.generate_btn)
+        self.format_btn = QPushButton("Format Photo")
+        self.format_btn.setObjectName("SecondaryButton")
+        self.format_btn.clicked.connect(self.choose_format_photo)
+        actions.addWidget(self.format_btn)
         actions.addStretch()
         self.find_btn = QPushButton("Find Available Slot")
         self.find_btn.setObjectName("SecondaryButton")
@@ -102,6 +110,10 @@ class TimetableView(QWidget):
         self.hint.setStyleSheet("color: #64748B; font-size: 11px; padding: 2px 4px;")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
+        self.format_status = QLabel("")
+        self.format_status.setStyleSheet("color: #64748B; font-size: 11px; padding: 2px 4px;")
+        self.format_status.setWordWrap(True)
+        layout.addWidget(self.format_status)
         self.load_semesters()
 
     def load_semesters(self):
@@ -118,8 +130,60 @@ class TimetableView(QWidget):
 
     def refresh(self):
         self.load_semesters()
+        self.refresh_format_status()
         if self.current_semester_id:
             self.load_timetable()
+
+    def _saved_format_path(self):
+        session = get_session()
+        try:
+            setting = session.query(Setting).filter(Setting.key == "timetable_format_photo").first()
+            return setting.value if setting else ""
+        finally:
+            session.close()
+
+    def refresh_format_status(self):
+        path = self._saved_format_path()
+        if path:
+            self.format_status.setText(f"Format saved: {path}  •  Generate will reuse this format")
+        else:
+            self.format_status.setText("No format photo saved. Generate Timetable will ask for one before continuing.")
+
+    def choose_format_photo(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Timetable Format Photo",
+            "",
+            "Images (*.png *.jpg *.jpeg *.webp)"
+        )
+        if not path:
+            return False
+        session = get_session()
+        try:
+            setting = session.query(Setting).filter(Setting.key == "timetable_format_photo").first()
+            if setting:
+                setting.value = path
+            else:
+                session.add(Setting(key="timetable_format_photo", value=path))
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            QMessageBox.critical(self, "Format Photo", f"Could not save the format photo:\n{exc}")
+            return False
+        finally:
+            session.close()
+        self.refresh_format_status()
+        return True
+
+    def generate_timetable(self):
+        if not self._saved_format_path() and not self.choose_format_photo():
+            return
+        self.load_timetable()
+        QMessageBox.information(
+            self,
+            "Timetable Ready",
+            "The saved format is applied to this timetable view. Add or edit lectures to complete the schedule."
+        )
 
     def on_semester_changed(self, idx):
         if idx < 0:
