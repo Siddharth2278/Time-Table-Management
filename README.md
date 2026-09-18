@@ -47,7 +47,7 @@ Database is created at `%APPDATA%\CollegeTimetableManager\timetable.db` on first
 pytest tests/test_conflict_engine.py -v
 ```
 
-13 automated tests for the conflict engine.
+14 automated tests for the conflict engine and timetable validation.
 
 ## Building Installer
 
