@@ -18,6 +18,7 @@ from app.ui.timeslot_view import TimeSlotView
 from app.ui.availability_view import AvailabilityView
 from app.ui.conflict_view import ConflictView
 from app.ui.backup_view import BackupView
+from app.ui.help_view import HelpView
 from app.ui.settings_view import SettingsView
 
 SIDEBAR_ITEMS = [
@@ -31,6 +32,7 @@ SIDEBAR_ITEMS = [
     ("Availability", "Availability"),
     ("Conflicts", "Conflicts"),
     ("Backup & Restore", "Backup"),
+    ("Help & How to Use", "Help"),
     ("Settings", "Settings"),
 ]
 
@@ -60,6 +62,7 @@ class Sidebar(QFrame):
             "Availability": "◷",
             "Conflicts": "⚠",
             "Backup": "▣",
+            "Help": "?",
             "Settings": "⚙",
         }
         self._labels = {key: label for label, key in SIDEBAR_ITEMS}
@@ -205,6 +208,7 @@ class MainWindow(QMainWindow):
             "Availability": self.availability,
             "Conflicts": self.conflicts,
             "Backup": self.backup,
+            "Help": HelpView(),
             "Settings": self.settings,
         }
         self.key_to_index = {}
