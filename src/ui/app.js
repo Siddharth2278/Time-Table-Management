@@ -143,6 +143,16 @@ document.querySelector('#new-button').addEventListener('click', () => {
   document.querySelector('#timetable-setup').scrollIntoView({ behavior: 'smooth', block: 'center' });
   showToast('Create another timetable for this department.');
 });
+document.querySelector('#resources-link').addEventListener('click', (event) => {
+  event.preventDefault();
+  showToast('Resources are managed from the college profile and saved format.');
+});
+document.querySelector('#settings-link').addEventListener('click', (event) => {
+  event.preventDefault();
+  document.querySelector('#profile-panel').classList.remove('is-hidden');
+  document.querySelector('#profile-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  showToast('Update the college profile settings here.');
+});
 
 const dropZone = document.querySelector('#drop-zone');
 ['dragenter', 'dragover'].forEach((eventName) => dropZone.addEventListener(eventName, (event) => { event.preventDefault(); dropZone.classList.add('dragging'); }));
