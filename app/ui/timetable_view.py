@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QMessageBox, QMenu, QFileDialog, QInputDialog
 )
 from PySide6.QtCore import Qt, QTime
-from PySide6.QtGui import QColor, QAction
+from PySide6.QtGui import QColor, QAction, QPixmap
 from app.database import get_session
 from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
 from app.services.timetable_service import TimetableService
@@ -114,6 +114,11 @@ class TimetableView(QWidget):
         self.format_status.setStyleSheet("color: #64748B; font-size: 11px; padding: 2px 4px;")
         self.format_status.setWordWrap(True)
         layout.addWidget(self.format_status)
+        self.format_preview = QLabel("No format photo selected")
+        self.format_preview.setMinimumHeight(72)
+        self.format_preview.setAlignment(Qt.AlignCenter)
+        self.format_preview.setStyleSheet("color: #94A3B8; background: #F8FAFC; border: 1px dashed #CBD5E1; padding: 6px;")
+        layout.addWidget(self.format_preview)
         self.load_semesters()
 
     def load_semesters(self):
@@ -145,9 +150,19 @@ class TimetableView(QWidget):
     def refresh_format_status(self):
         path = self._saved_format_path()
         if path:
-            self.format_status.setText(f"Format saved: {path}  •  Generate will reuse this format")
+            pixmap = QPixmap(path)
+            if pixmap.isNull():
+                self.format_status.setText(f"Format file is missing or unreadable: {path}  •  Choose Format Photo again")
+                self.format_preview.setText("Saved format preview unavailable")
+                self.format_preview.setPixmap(QPixmap())
+            else:
+                self.format_status.setText(f"Format saved: {path}  •  Generate will reuse this format")
+                self.format_preview.setText("")
+                self.format_preview.setPixmap(pixmap.scaled(520, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             self.format_status.setText("No format photo saved. Generate Timetable will ask for one before continuing.")
+            self.format_preview.setText("No format photo selected")
+            self.format_preview.setPixmap(QPixmap())
 
     def choose_format_photo(self):
         path, _ = QFileDialog.getOpenFileName(
