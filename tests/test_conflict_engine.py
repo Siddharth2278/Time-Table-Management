@@ -232,3 +232,18 @@ def test_find_available_slots_returns_only_valid(session):
             assert False, "Found occupied slot as available"
     # At least some slots should be found
     assert len(slots) > 0
+
+def test_subject_weekly_limit_rejects_extra_lecture(session):
+    sem1 = session.query(Semester).filter(Semester.name=="Semester 1").first()
+    teacher = session.query(Teacher).filter(Teacher.name=="Prof. Amit").first()
+    room = session.query(Room).filter(Room.room_number=="101").first()
+    subject = session.query(Subject).filter(Subject.code=="CS101").first()
+    days = session.query(WorkingDay).filter(WorkingDay.name.in_(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])).all()
+
+    for day in days[:4]:
+        ok, _ = TimetableService.create_entry(session, sem1.id, subject.id, teacher.id, room.id, day.id, "10:00", "11:00", "Theory")
+        assert ok
+
+    ok, conflicts = TimetableService.create_entry(session, sem1.id, subject.id, teacher.id, room.id, days[4].id, "10:00", "11:00", "Theory")
+    assert not ok
+    assert any(c.conflict_type == "subject_limit" for c in conflicts)
