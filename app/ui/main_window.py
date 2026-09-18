@@ -57,7 +57,9 @@ class Sidebar(QFrame):
             "Rooms": "🏫",
             "Semesters": "🎓",
             "TimeSlots": "⏰",
+            "Availability": "◷",
             "Conflicts": "⚠",
+            "Backup": "▣",
             "Settings": "⚙",
         }
         self._labels = {key: label for label, key in SIDEBAR_ITEMS}

@@ -11,7 +11,13 @@ from app.utils.helpers import time_to_minutes
 from app.services.conflict_service import ConflictService
 
 def show_error(parent, msg):
-    QMessageBox.critical(parent, "Error", msg)
+    # Keep validation and conflict text exactly as produced by the service.
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Critical)
+    box.setWindowTitle("Error")
+    box.setText(str(msg))
+    box.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+    box.exec()
 
 def show_info(parent, msg):
     QMessageBox.information(parent, "Info", msg)
