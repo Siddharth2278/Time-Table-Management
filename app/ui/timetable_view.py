@@ -83,6 +83,10 @@ class TimetableView(QWidget):
         self.completion_label = QLabel("")
         self.completion_label.setStyleSheet("color: #334155; font-size: 12px; font-weight: 600;")
         layout.addWidget(self.completion_label)
+        self.conflict_notice = QLabel("")
+        self.conflict_notice.setWordWrap(True)
+        self.conflict_notice.hide()
+        layout.addWidget(self.conflict_notice)
 
         # Timetable grid
         self.table = QTableWidget()
@@ -120,6 +124,15 @@ class TimetableView(QWidget):
         self.format_preview.setStyleSheet("color: #94A3B8; background: #F8FAFC; border: 1px dashed #CBD5E1; padding: 6px;")
         layout.addWidget(self.format_preview)
         self.load_semesters()
+
+    def show_conflict_notice(self, message):
+        self.conflict_notice.setText(f"Conflict prevented:\n{message}")
+        self.conflict_notice.setStyleSheet("color: #8B1E2D; background: #FFF1F2; border: 1px solid #FDA4AF; border-radius: 6px; padding: 9px 11px; font-weight: 700;")
+        self.conflict_notice.show()
+
+    def clear_conflict_notice(self):
+        self.conflict_notice.clear()
+        self.conflict_notice.hide()
 
     def load_semesters(self):
         session = get_session()
@@ -344,10 +357,12 @@ class TimetableView(QWidget):
             try:
                 ok, result = TimetableService.create_entry(session, **data, academic_year="2026-27")
                 if ok:
+                    self.clear_conflict_notice()
                     QMessageBox.information(self, "Success", "Lecture added successfully.")
                     self.load_timetable()
                 else:
                     msgs = "\n".join([c.message for c in result])
+                    self.show_conflict_notice(msgs)
                     QMessageBox.critical(self, "Failed to Add", msgs)
             finally:
                 session.close()
@@ -378,10 +393,12 @@ class TimetableView(QWidget):
             try:
                 ok, result = TimetableService.update_entry(session, eid, **data)
                 if ok:
+                    self.clear_conflict_notice()
                     QMessageBox.information(self, "Success", "Lecture updated.")
                     self.load_timetable()
                 else:
                     msgs = "\n".join([c.message for c in result])
+                    self.show_conflict_notice(msgs)
                     QMessageBox.critical(self, "Conflict", msgs)
             finally:
                 session.close()
@@ -611,10 +628,12 @@ class TimetableView(QWidget):
         try:
             ok, result = TimetableService.move_entry(session, eid, day_id, new_start, new_end)
             if ok:
+                self.clear_conflict_notice()
                 QMessageBox.information(self, "Moved", f"Lecture moved to {self._days[col-1].name} {new_start}-{new_end}")
                 self.load_timetable()
             else:
                 msgs = "\n".join([c.message for c in result])
+                self.show_conflict_notice(msgs)
                 QMessageBox.critical(self, "Move Failed - Conflict", msgs)
         finally:
             session.close()
