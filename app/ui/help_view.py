@@ -63,7 +63,7 @@ class HelpView(QWidget):
                 "Rooms & Labs: manage classrooms, laboratories, seminar halls, capacity, and status.",
                 "Semesters: view completion progress and open a semester timetable.",
                 "Time Slots: add custom durations such as 30, 45, 60, 90, or 120 minutes and configure breaks.",
-                "Availability: mark teacher or room periods as unavailable.",
+                "Availability: mark teacher or room periods as unavailable so the scheduler blocks those periods.",
             ]),
             ("Save, export, and protect your data", [
                 "All data is stored locally in SQLite on this PC. The app works without internet, a browser, or a server.",
