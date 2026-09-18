@@ -104,14 +104,14 @@ def init_db(db_path: Path | None = None, echo: bool = False):
                 "default_start_time": "08:00",
                 "default_end_time": "17:00",
                 "backup_location": str(get_data_dir() / "backups"),
-                "theme": "light",
+                "theme": "dark",
             }
             for k, v in defaults.items():
                 session.add(Setting(key=k, value=v))
             session.flush()
         # Ensure theme exists for existing DBs (when settings already existed)
         if session.query(Setting).filter(Setting.key=="theme").first() is None:
-            session.add(Setting(key="theme", value="light"))
+            session.add(Setting(key="theme", value="dark"))
             session.flush()
         # Short demo data for one department — simple but effective
         from app.models import Teacher as _Teacher

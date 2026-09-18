@@ -14,7 +14,7 @@ class DropZone(QFrame):
         self.setAcceptDrops(True)
         self.setMinimumHeight(76)
         self.setObjectName("DropZone")
-        self.setStyleSheet("QFrame#DropZone { background: #F8FAFC; border: 1px solid #E5EDF2; border-radius: 6px; }")
+        self.setStyleSheet("QFrame#DropZone { background: #141F2B; border: 1px solid #2A3B4C; border-radius: 6px; }")
 
     def mousePressEvent(self, event):
         self.clicked.emit(self.row, self.column)
@@ -42,7 +42,7 @@ class DropZone(QFrame):
         event.acceptProposedAction()
 
     def reset_style(self):
-        self.setStyleSheet("QFrame#DropZone { background: #F8FAFC; border: 1px solid #E5EDF2; border-radius: 6px; }")
+        self.setStyleSheet("QFrame#DropZone { background: #141F2B; border: 1px solid #2A3B4C; border-radius: 6px; }")
 
 
 class LectureCard(QFrame):
@@ -115,7 +115,7 @@ class TimetableGridWidget(QFrame):
         self.cards = {}
         self.selected_entry_id = None
         self.selected_slot = (-1, -1)
-        self.setStyleSheet("QFrame#TimetableGrid { background: #FFFFFF; border: 1px solid #D8E4EA; border-radius: 12px; }")
+        self.setStyleSheet("QFrame#TimetableGrid { background: #0F1722; border: 1px solid #2A3B4C; border-radius: 12px; }")
 
     def clear_grid(self):
         while self.grid.count():
@@ -139,7 +139,7 @@ class TimetableGridWidget(QFrame):
         for row, (start, end) in enumerate(times, start=1):
             label = QLabel(f"{start}\n{end}")
             label.setAlignment(Qt.AlignCenter)
-            label.setStyleSheet("color: #55717D; background: #F0F5F7; border-radius: 6px; padding: 8px 4px; font-size: 10px; font-weight: 700;")
+            label.setStyleSheet("color: #9CB0BE; background: #1B2A38; border-radius: 6px; padding: 8px 4px; font-size: 10px; font-weight: 700;")
             self.grid.addWidget(label, row, 0)
             for column, _day in enumerate(days, start=1):
                 zone = DropZone(row - 1, column - 1, self)

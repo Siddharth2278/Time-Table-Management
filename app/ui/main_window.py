@@ -270,9 +270,9 @@ class MainWindow(QMainWindow):
         session = get_session()
         try:
             s = session.query(Setting).filter(Setting.key=="theme").first()
-            theme = s.value if s and s.value in ("light", "dark") else "light"
+            theme = s.value if s and s.value in ("light", "dark") else "dark"
         except:
-            theme = "light"
+            theme = "dark"
         finally:
             try:
                 session.close()

@@ -120,7 +120,7 @@ class SettingsView(QWidget):
             except:
                 self.start_edit.setTime(QTime(10, 15))
                 self.end_edit.setTime(QTime(17, 15))
-            theme = get("theme", "light")
+            theme = get("theme", "dark")
             idx = self.theme_combo.findData(theme)
             if idx >= 0:
                 self.theme_combo.setCurrentIndex(idx)
