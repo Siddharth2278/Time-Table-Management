@@ -15,7 +15,9 @@ from app.ui.subject_view import SubjectView
 from app.ui.room_view import RoomView
 from app.ui.semester_view import SemesterView
 from app.ui.timeslot_view import TimeSlotView
+from app.ui.availability_view import AvailabilityView
 from app.ui.conflict_view import ConflictView
+from app.ui.backup_view import BackupView
 from app.ui.settings_view import SettingsView
 
 SIDEBAR_ITEMS = [
@@ -26,7 +28,9 @@ SIDEBAR_ITEMS = [
     ("Rooms & Labs", "Rooms"),
     ("Semesters", "Semesters"),
     ("Time Slots", "TimeSlots"),
+    ("Availability", "Availability"),
     ("Conflicts", "Conflicts"),
+    ("Backup & Restore", "Backup"),
     ("Settings", "Settings"),
 ]
 
@@ -183,7 +187,9 @@ class MainWindow(QMainWindow):
         self.rooms = RoomView()
         self.semesters = SemesterView()
         self.timeslots = TimeSlotView()
+        self.availability = AvailabilityView()
         self.conflicts = ConflictView()
+        self.backup = BackupView()
         self.settings = SettingsView()
 
         mapping = {
@@ -194,7 +200,9 @@ class MainWindow(QMainWindow):
             "Rooms": self.rooms,
             "Semesters": self.semesters,
             "TimeSlots": self.timeslots,
+            "Availability": self.availability,
             "Conflicts": self.conflicts,
+            "Backup": self.backup,
             "Settings": self.settings,
         }
         self.key_to_index = {}
