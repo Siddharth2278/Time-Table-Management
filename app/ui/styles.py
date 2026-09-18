@@ -354,6 +354,8 @@ QTableWidget::item { padding: 8px; }
 QLineEdit, QComboBox, QSpinBox, QTimeEdit { min-height: 30px; }
 QPushButton#PrimaryButton, QPushButton#SecondaryButton, QPushButton#DangerButton { min-height: 34px; }
 QScrollArea { background: transparent; }
+QFrame#LectureCard[selected="true"] { border: 2px solid #176B57; background: #D6F2E9; }
+QFrame#DropZone { min-width: 120px; }
 """
 
 # Dark theme - polished

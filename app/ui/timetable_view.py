@@ -1,9 +1,6 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QMenu, QFileDialog, QInputDialog
-)
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog
 from PySide6.QtCore import Qt, QTime
-from PySide6.QtGui import QColor, QAction, QPixmap
+from PySide6.QtGui import QPixmap
 from app.database import get_session
 from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
 from app.services.timetable_service import TimetableService
@@ -11,6 +8,7 @@ from app.services.conflict_service import ConflictService
 from app.services.export_service import export_csv, export_excel, export_pdf
 from app.ui.dialogs import LectureDialog, TimeSlotDialog
 from app.utils.helpers import time_to_minutes
+from app.ui.timetable_grid import TimetableGridWidget
 
 class TimetableView(QWidget):
     def __init__(self):
@@ -88,27 +86,11 @@ class TimetableView(QWidget):
         self.conflict_notice.hide()
         layout.addWidget(self.conflict_notice)
 
-        # Timetable grid
-        self.table = QTableWidget()
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.setSelectionBehavior(QTableWidget.SelectItems)
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self.show_context)
-        self.table.cellDoubleClicked.connect(self.on_cell_double_click)
-        # Drag and drop
-        self.table.setDragEnabled(True)
-        self.table.setAcceptDrops(True)
-        self.table.setDragDropMode(QTableWidget.InternalMove)
-        self.table.viewport().installEventFilter(self)
-        layout.addWidget(self.table, 1)
-        # Track drag
-        self._drag_entry_id = None
-        self.table.setStyleSheet("""
-            QTableWidget { background: #FFFFFF; alternate-background-color: #F8FAFC; gridline-color: #E2E8F0; border: 1px solid #CBD5E1; border-radius: 6px; }
-            QTableWidget::item { padding: 4px; }
-            QHeaderView::section { background: #EEF2F7; padding: 4px 6px; font-weight: 600; font-size: 11px; color: #334155; border: 1px solid #E2E8F0; }
-        """)
+        self.grid = TimetableGridWidget()
+        self.grid.card_double_clicked.connect(self.edit_lecture_by_id)
+        self.grid.drop_requested.connect(self.handle_grid_drop)
+        self.grid.slot_clicked.connect(self.select_grid_slot)
+        layout.addWidget(self.grid, 1)
         # Hint for editable time slots
         self.hint = QLabel("Time slots are editable: double-click a time on the left to edit it, or go to Time Slots. Any custom time (e.g., 08:15-09:45) is allowed when adding a lecture.")
         self.hint.setStyleSheet("color: #64748B; font-size: 11px; padding: 2px 4px;")
@@ -133,6 +115,13 @@ class TimetableView(QWidget):
     def clear_conflict_notice(self):
         self.conflict_notice.clear()
         self.conflict_notice.hide()
+
+    def select_grid_slot(self, row, column):
+        self.grid.selected_slot = (row, column)
+
+    def edit_lecture_by_id(self, entry_id):
+        self.grid.selected_entry_id = entry_id
+        self.edit_lecture()
 
     def load_semesters(self):
         session = get_session()
@@ -236,13 +225,7 @@ class TimetableView(QWidget):
             # Completion
             comp = ConflictService.calculate_timetable_completion(session, self.current_semester_id)
             self.completion_label.setText(f"{self.sem_combo.currentText()} — Required: {comp['required']}  Scheduled: {comp['scheduled']}  Remaining: {comp['remaining']}  Completion: {comp['completion_pct']}%")
-            # Table setup
-            day_names = [d.name for d in days]
-            self.table.clear()
-            self.table.setColumnCount(len(day_names) + 1)
-            headers = ["Time"] + day_names
-            self.table.setHorizontalHeaderLabels(headers)
-            # Rows: use slots
+            # Card grid setup
             times = [(s.start_time, s.end_time) for s in slots]
             # If slots empty, create default 8 rows
             if not times:
@@ -254,86 +237,15 @@ class TimetableView(QWidget):
                 if t not in times:
                     extra_times.append(t)
             times.extend(extra_times)
-            # Sort times
             times = sorted(set(times), key=lambda x: time_to_minutes(x[0]))
-            self.table.setRowCount(len(times))
             self._times = times
             self._days = days
-            # Configure sizes
-            header = self.table.horizontalHeader()
-            header.setSectionResizeMode(0, QHeaderView.Fixed)
-            self.table.setColumnWidth(0, 110)
-            for i in range(1, len(headers)):
-                header.setSectionResizeMode(i, QHeaderView.Stretch)
-            self.table.verticalHeader().setVisible(False)
-            self.table.setAlternatingRowColors(True)
-            # Populate
-            # Build lookup: (day_id, time) -> entry
-            # But need overlap handling: if entry spans multiple slot rows, we need to place in exact matching row
-            # Simplify: place entry in row where its start/end matches exactly, else custom row
-            # For each entry, find row index
-            # Initialize empty
-            for r, (st, et) in enumerate(times):
-                item = QTableWidgetItem(f"{st}-{et}")
-                item.setTextAlignment(Qt.AlignCenter)
-                item.setBackground(QColor("#F8FAFC"))
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(r, 0, item)
-                for c in range(1, len(headers)):
-                    it = QTableWidgetItem("")
-                    it.setTextAlignment(Qt.AlignCenter)
-                    it.setFlags(it.flags() & ~Qt.ItemIsEditable)
-                    self.table.setItem(r, c, it)
-            # Place entries
-            for e in entries:
-                # Find row
-                t = (e.start_time, e.end_time)
-                try:
-                    row = times.index(t)
-                except ValueError:
-                    continue
-                # Find column for day
-                col = None
-                for idx, d in enumerate(days):
-                    if d.id == e.day_id:
-                        col = idx + 1
-                        break
-                if col is None:
-                    continue
-                text = f"{e.subject.code if e.subject else ''}\n{e.subject.name if e.subject else ''}\n{e.teacher.name if e.teacher else ''}\n{e.room.name if e.room else ''} ({e.room.room_number if e.room else ''})\n{e.lecture_type}"
-                item = self.table.item(row, col)
-                if item:
-                    item.setText(text)
-                    # Color by type
-                    colors = {"Theory": "#D9E1F2", "Practical": "#D1FAE5", "Lab": "#FEF3C7", "Tutorial": "#E0E7FF"}
-                    bg = colors.get(e.lecture_type, "#F1F5F9")
-                    item.setBackground(QColor(bg))
-                    item.setData(Qt.UserRole, e.id)
-                    item.setToolTip(f"{e.subject.name if e.subject else ''} - {e.teacher.name if e.teacher else ''} - {e.room.name if e.room else ''}\n{e.day.name if e.day else ''} {e.start_time}-{e.end_time}\nClick Edit to modify, drag to move")
-            self.table.resizeRowsToContents()
+            self.grid.populate(days, times, entries)
         finally:
             session.close()
 
     def _selected_entry_id(self):
-        row = self.table.currentRow()
-        col = self.table.currentColumn()
-        if row < 0 or col <= 0:
-            # Try find any selected with data
-            for r in range(self.table.rowCount()):
-                for c in range(1, self.table.columnCount()):
-                    it = self.table.item(r, c)
-                    if it and it.isSelected() and it.data(Qt.UserRole):
-                        return it.data(Qt.UserRole)
-            return None
-        item = self.table.item(row, col)
-        if item and item.data(Qt.UserRole):
-            return item.data(Qt.UserRole)
-        # Search for data in row selection
-        for c in range(1, self.table.columnCount()):
-            it = self.table.item(row, c)
-            if it and it.data(Qt.UserRole):
-                return it.data(Qt.UserRole)
-        return None
+        return self.grid.selected_entry_id
 
     def add_lecture(self):
         if not self.current_semester_id:
@@ -343,13 +255,10 @@ class TimetableView(QWidget):
         day_id = None
         st = None
         et = None
-        row = self.table.currentRow()
-        col = self.table.currentColumn()
+        row, col = self.grid.selected_slot if hasattr(self.grid, "selected_slot") else (-1, -1)
         if row >= 0 and col >= 0 and hasattr(self, '_times') and hasattr(self, '_days'):
-            if 0 <= row < len(self._times):
-                st, et = self._times[row]
-            if col > 0 and col-1 < len(self._days):
-                day_id = self._days[col-1].id
+            st, et = self._times[row]
+            day_id = self._days[col].id
         dlg = LectureDialog(self, semester_id=self.current_semester_id, day_id=day_id, start_time=st, end_time=et)
         if dlg.exec():
             data = dlg.get_data()
@@ -406,6 +315,26 @@ class TimetableView(QWidget):
                     dlg.session.close()
                 except:
                     pass
+
+    def handle_grid_drop(self, entry_id, row, column):
+        if row < 0 or row >= len(self._times) or column < 0 or column >= len(self._days):
+            return
+        new_start, new_end = self._times[row]
+        day_id = self._days[column].id
+        session = get_session()
+        try:
+            ok, result = TimetableService.move_entry(session, entry_id, day_id, new_start, new_end)
+            if ok:
+                self.clear_conflict_notice()
+                self.load_timetable()
+                QMessageBox.information(self, "Lecture moved", f"Moved to {self._days[column].name} {new_start}-{new_end}.")
+            else:
+                msgs = "\n".join([c.message for c in result])
+                self.show_conflict_notice(msgs)
+                self.grid.set_drop_feedback(row, column, False)
+                QMessageBox.critical(self, "Move blocked by conflict", msgs)
+        finally:
+            session.close()
 
     def delete_lecture(self):
         eid = self._selected_entry_id()
