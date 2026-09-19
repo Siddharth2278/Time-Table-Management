@@ -16,20 +16,25 @@ class TimetableView(QWidget):
         self.current_semester_id = None
         self.entries = []
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(10)
         # Top bar
         top = QHBoxLayout()
         title = QLabel("Timetable Builder")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
+        title.setObjectName("PageTitle")
         top.addWidget(title)
         top.addStretch()
+        sem_lbl = QLabel("Semester:")
+        sem_lbl.setObjectName("PageSubtitle")
         self.sem_combo = QComboBox()
         self.sem_combo.setMinimumWidth(180)
         self.sem_combo.currentIndexChanged.connect(self.on_semester_changed)
-        top.addWidget(QLabel("Semester:"))
+        top.addWidget(sem_lbl)
         top.addWidget(self.sem_combo)
         layout.addLayout(top)
+        sub = QLabel("Add lectures, drag cards to move them. Any clash is blocked with a direct message.")
+        sub.setObjectName("PageSubtitle")
+        layout.addWidget(sub)
 
         # Actions bar
         actions = QHBoxLayout()
@@ -79,10 +84,11 @@ class TimetableView(QWidget):
 
         # Completion bar
         self.completion_label = QLabel("")
-        self.completion_label.setStyleSheet("color: #334155; font-size: 12px; font-weight: 600;")
+        self.completion_label.setObjectName("SectionTitle")
         layout.addWidget(self.completion_label)
         self.conflict_notice = QLabel("")
         self.conflict_notice.setWordWrap(True)
+        self.conflict_notice.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
         self.conflict_notice.hide()
         layout.addWidget(self.conflict_notice)
 
@@ -93,23 +99,26 @@ class TimetableView(QWidget):
         layout.addWidget(self.grid, 1)
         # Hint for editable time slots
         self.hint = QLabel("Time slots are editable: double-click a time on the left to edit it, or go to Time Slots. Any custom time (e.g., 08:15-09:45) is allowed when adding a lecture.")
-        self.hint.setStyleSheet("color: #64748B; font-size: 11px; padding: 2px 4px;")
+        self.hint.setObjectName("PageSubtitle")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
         self.format_status = QLabel("")
-        self.format_status.setStyleSheet("color: #64748B; font-size: 11px; padding: 2px 4px;")
+        self.format_status.setObjectName("PageSubtitle")
         self.format_status.setWordWrap(True)
         layout.addWidget(self.format_status)
         self.format_preview = QLabel("No format photo selected")
         self.format_preview.setMinimumHeight(72)
         self.format_preview.setAlignment(Qt.AlignCenter)
-        self.format_preview.setStyleSheet("color: #94A3B8; background: #F8FAFC; border: 1px dashed #CBD5E1; padding: 6px;")
+        self.format_preview.setStyleSheet("color: #64748B; font-size: 12px; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 6px;")
         layout.addWidget(self.format_preview)
         self.load_semesters()
 
     def show_conflict_notice(self, message):
-        self.conflict_notice.setText(f"Conflict prevented:\n{message}")
-        self.conflict_notice.setStyleSheet("color: #8B1E2D; background: #FFF1F2; border: 1px solid #FDA4AF; border-radius: 6px; padding: 9px 11px; font-weight: 700;")
+        self.conflict_notice.setText(f"\u274c Blocked \u2014 scheduling conflict:\n{message}")
+        self.conflict_notice.setStyleSheet(
+            "color: #991B1B; background: #FEF2F2; border: 1px solid #FECACA; "
+            "border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 12.5px;"
+        )
         self.conflict_notice.show()
 
     def clear_conflict_notice(self):

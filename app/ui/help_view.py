@@ -15,16 +15,16 @@ class HelpView(QWidget):
 
         title_row = QHBoxLayout()
         title = QLabel("Help & How to Use")
-        title.setStyleSheet("font-size: 20px; font-weight: 800; color: var(--text-primary);")
+        title.setObjectName("PageTitle")
         title_row.addWidget(title)
         title_row.addStretch()
         self.status = QLabel("Offline guide")
-        self.status.setStyleSheet("color: var(--success); font-weight: 700; background: var(--bg-success-light); padding: 6px 10px; border-radius: 6px;")
+        self.status.setStyleSheet("color: #065F46; font-weight: 700; font-size: 12px; background: #ECFDF5; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 14px;")
         title_row.addWidget(self.status)
         outer.addLayout(title_row)
 
         subtitle = QLabel("Use this guide whenever you need a quick explanation of a page, button, or timetable rule.")
-        subtitle.setStyleSheet("color: #70808B; font-size: 12px; padding-bottom: 6px;")
+        subtitle.setObjectName("PageSubtitle")
         subtitle.setWordWrap(True)
         outer.addWidget(subtitle)
 
@@ -54,8 +54,9 @@ class HelpView(QWidget):
                 "A teacher cannot teach two classes at overlapping times, even when the classes belong to different semesters.",
                 "A semester cannot have two lectures at the same time.",
                 "A room or laboratory cannot be used by two lectures at the same time.",
-                "Teacher and room unavailable periods, breaks, invalid times, and subject weekly limits are checked before saving.",
-                "Back-to-back lectures are allowed. For example, 10:00–11:00 and 11:00–12:00 do not overlap.",
+                "Breaks, invalid times, and subject weekly limits are checked before saving.",
+                "Back-to-back lectures are allowed. For example, 10:00\u201311:00 and 11:00\u201312:00 do not overlap.",
+                "Every clash is shown immediately in a pop-up message with the exact teacher, semester, room, day and time.",
             ]),
             ("Management pages", [
                 "Teachers: add, edit, search, delete, and view a teacher's timetable across all six semesters.",
@@ -63,11 +64,9 @@ class HelpView(QWidget):
                 "Rooms & Labs: manage classrooms, laboratories, seminar halls, capacity, and status.",
                 "Semesters: view completion progress and open a semester timetable.",
                 "Time Slots: add custom durations such as 30, 45, 60, 90, or 120 minutes and configure breaks.",
-                "Availability: mark teacher or room periods as unavailable so the scheduler blocks those periods.",
             ]),
             ("Save, export, and protect your data", [
                 "All data is stored locally in SQLite on this PC. The app works without internet, a browser, or a server.",
-                "Use Backup & Restore to save a database backup or restore an earlier backup.",
                 "From Timetable, export the current semester to PDF, Excel, or CSV, or use Print for a paper copy.",
                 "Closing and reopening the app does not remove your timetable. Uninstalling preserves the database unless you explicitly delete it.",
             ]),
@@ -87,7 +86,8 @@ class HelpView(QWidget):
                 label = QLabel(point)
                 label.setWordWrap(True)
                 label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                label.setStyleSheet("color: var(--text-primary); font-size: 12px; padding: 2px 0;")
+                label.setObjectName("HelpBody")
+                label.setStyleSheet("font-size: 12.5px; padding: 2px 0; background: transparent; border: none;")
                 group_layout.addWidget(label)
             layout.addWidget(group)
 

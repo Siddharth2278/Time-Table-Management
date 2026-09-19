@@ -16,7 +16,7 @@ class SubjectView(QWidget):
         layout.setSpacing(10)
         top = QHBoxLayout()
         title = QLabel("Subjects")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
+        title.setObjectName("PageTitle")
         top.addWidget(title)
         top.addStretch()
         self.search = QLineEdit()
@@ -61,7 +61,7 @@ class SubjectView(QWidget):
 
         # Info about weekly requirement
         self.info = QLabel("")
-        self.info.setStyleSheet("color: #334155; font-size: 11px;")
+        self.info.setObjectName("PageSubtitle")
         self.info.setWordWrap(True)
         layout.addWidget(self.info)
 
@@ -107,12 +107,13 @@ class SubjectView(QWidget):
                 self.table.setItem(r, 3, QTableWidgetItem(sem_name))
                 self.table.setItem(r, 4, QTableWidgetItem(s.subject_type))
                 req_item = QTableWidgetItem(f"{scheduled}/{s.required_lectures_per_week}")
+                from PySide6.QtGui import QColor as _QC
                 if scheduled < s.required_lectures_per_week:
-                    req_item.setForeground(Qt.darkYellow)
+                    req_item.setForeground(_QC("#D97706"))
                 elif scheduled == s.required_lectures_per_week:
-                    req_item.setForeground(Qt.darkGreen)
+                    req_item.setForeground(_QC("#059669"))
                 else:
-                    req_item.setForeground(Qt.red)
+                    req_item.setForeground(_QC("#DC2626"))
                 self.table.setItem(r, 5, QTableWidgetItem(f"{scheduled}/{s.required_lectures_per_week}"))
                 self.table.setItem(r, 6, QTableWidgetItem(f"{s.lecture_duration} mins"))
                 teacher_name = s.assigned_teacher.name if s.assigned_teacher else "-"

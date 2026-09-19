@@ -13,10 +13,10 @@ class SettingsView(QWidget):
         outer.setSpacing(0)
 
         title = QLabel("Settings")
-        title.setStyleSheet("font-size: 20px; font-weight: 800; color: #0F172A;")
+        title.setObjectName("PageTitle")
         outer.addWidget(title)
         sub = QLabel("Configure college and timetable preferences")
-        sub.setStyleSheet("color: #64748B; font-size: 12px; margin-bottom: 10px;")
+        sub.setObjectName("PageSubtitle")
         outer.addWidget(sub)
 
         scroll = QScrollArea()
@@ -74,7 +74,7 @@ class SettingsView(QWidget):
         self.theme_combo.addItem("Dark — low brightness", "dark")
         af.addRow("Theme:", self.theme_combo)
         hint2 = QLabel("Dark reduces eye strain. Takes effect after Save.")
-        hint2.setStyleSheet("color: #64748B; font-size: 11px;")
+        hint2.setObjectName("PageSubtitle")
         hint2.setWordWrap(True)
         af.addRow("", hint2)
         layout.addWidget(self.group_appear)

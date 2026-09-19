@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, QPoint, QMimeData, Signal
-from PySide6.QtGui import QColor, QDrag, QPainter, QPen
+from PySide6.QtGui import QColor, QDrag
 from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QVBoxLayout, QGraphicsDropShadowEffect
 
 
@@ -12,10 +12,9 @@ class DropZone(QFrame):
         self.row = row
         self.column = column
         self.setAcceptDrops(True)
-        self.setMinimumHeight(76)
+        self.setMinimumHeight(78)
         self.setObjectName("DropZone")
-        # Theme colors - will be styled via global QSS, but keep fallback
-        self.setStyleSheet("QFrame#DropZone { border: 1px solid var(--border-light); border-radius: 6px; }")
+        self.reset_style()
 
     def mousePressEvent(self, event):
         self.clicked.emit(self.row, self.column)
@@ -24,8 +23,9 @@ class DropZone(QFrame):
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("application/x-timetable-entry"):
             event.acceptProposedAction()
-            # Feedback handled by QSS hover state; add temporary class if needed
-            self.setStyleSheet("QFrame#DropZone { border: 2px solid var(--accent); border-radius: 6px; background: var(--bg-primary-light); }")
+            self.setStyleSheet(
+                "QFrame#DropZone { border: 2px solid #4F46E5; border-radius: 8px; background: #EEF2FF; }"
+            )
         else:
             event.ignore()
 
@@ -34,16 +34,29 @@ class DropZone(QFrame):
         super().dragLeaveEvent(event)
 
     def reset_style(self):
-        self.setStyleSheet("QFrame#DropZone { border: 1px solid var(--border-light); border-radius: 6px; }")
+        self.setStyleSheet(
+            "QFrame#DropZone { border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; }"
+        )
 
     def set_drop_feedback(self, valid):
         if valid:
-            self.setStyleSheet("QFrame#DropZone { border: 2px solid var(--success); border-radius: 6px; background: var(--bg-success-light); }")
+            self.setStyleSheet(
+                "QFrame#DropZone { border: 2px solid #059669; border-radius: 8px; background: #ECFDF5; }"
+            )
         else:
-            self.setStyleSheet("QFrame#DropZone { border: 2px solid var(--error); border-radius: 6px; background: var(--bg-error-light); }")
+            self.setStyleSheet(
+                "QFrame#DropZone { border: 2px solid #DC2626; border-radius: 8px; background: #FEF2F2; }"
+            )
 
 
 class LectureCard(QFrame):
+    ACCENTS = {
+        "Theory": ("#EFF6FF", "#2563EB"),
+        "Practical": ("#EEF2FF", "#4F46E5"),
+        "Lab": ("#FFFBEB", "#D97706"),
+        "Tutorial": ("#F5F3FF", "#7C3AED"),
+    }
+
     def __init__(self, entry, row, column, color, parent=None):
         super().__init__(parent)
         self.entry_id = entry.id
@@ -52,26 +65,29 @@ class LectureCard(QFrame):
         self.setObjectName("LectureCard")
         self.setCursor(Qt.OpenHandCursor)
         self.setMinimumHeight(66)
-        # Theme-aware base style; specific colors from QSS variables
-        self.setStyleSheet(
-            "QFrame#LectureCard { border-radius: 8px; padding: 6px; } "
-            "QFrame#LectureCard:hover { border: 1px solid var(--accent); }"
+        lecture_type = getattr(entry, "lecture_type", "Theory") or "Theory"
+        bg, accent = self.ACCENTS.get(lecture_type, ("#EFF6FF", "#2563EB"))
+        self._base_style = (
+            f"QFrame#LectureCard {{ background: {bg}; border: 1px solid #E2E8F0; "
+            f"border-left: 4px solid {accent}; border-radius: 8px; padding: 6px; }} "
+            f"QFrame#LectureCard:hover {{ border: 1px solid {accent}; border-left: 4px solid {accent}; }}"
         )
+        self.setStyleSheet(self._base_style)
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(12)
+        shadow.setBlurRadius(10)
         shadow.setOffset(0, 2)
-        shadow.setColor(QColor(25, 55, 70, 35))
+        shadow.setColor(QColor(15, 23, 42, 28))
         self.setGraphicsEffect(shadow)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(9, 7, 7, 7)
         layout.setSpacing(2)
         subject = QLabel(f"{entry.subject.code if entry.subject else ''}  {entry.subject.name if entry.subject else 'Untitled'}")
-        subject.setStyleSheet("color: var(--text-primary); font-weight: 800; font-size: 11px; background: transparent;")
+        subject.setStyleSheet("color: #0F172A; font-weight: 800; font-size: 11.5px; background: transparent; border: none;")
         subject.setWordWrap(True)
         teacher = QLabel(entry.teacher.name if entry.teacher else "Unassigned teacher")
-        teacher.setStyleSheet("color: var(--text-muted); font-size: 10px; background: transparent;")
-        room = QLabel(f"{entry.room.name if entry.room else 'No room'}  ·  {entry.start_time}-{entry.end_time}")
-        room.setStyleSheet("color: var(--text-muted); font-size: 9px; background: transparent;")
+        teacher.setStyleSheet("color: #475569; font-size: 10.5px; font-weight: 600; background: transparent; border: none;")
+        room = QLabel(f"{entry.room.name if entry.room else 'No room'}  \u00b7  {entry.start_time}-{entry.end_time}")
+        room.setStyleSheet("color: #64748B; font-size: 10px; background: transparent; border: none;")
         layout.addWidget(subject)
         layout.addWidget(teacher)
         layout.addWidget(room)
@@ -117,8 +133,9 @@ class TimetableGridWidget(QFrame):
         self.cards = {}
         self.selected_entry_id = None
         self.selected_slot = (-1, -1)
-        # Base grid styling via QSS; minimal inline for initial state
-        self.setStyleSheet("QFrame#TimetableGrid { border-radius: 12px; }")
+        self.setStyleSheet(
+            "QFrame#TimetableGrid { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; }"
+        )
 
     def clear_grid(self):
         while self.grid.count():
@@ -138,16 +155,16 @@ class TimetableGridWidget(QFrame):
             header = QLabel(label)
             header.setAlignment(Qt.AlignCenter)
             header.setStyleSheet(
-                "color: var(--text-primary); background: var(--bg-primary-light); "
-                "border-radius: 6px; padding: 10px 5px; font-size: 10px; font-weight: 800;"
+                "color: #312E81; background: #EEF2FF; "
+                "border: 1px solid #E0E7FF; border-radius: 8px; padding: 10px 5px; font-size: 10.5px; font-weight: 800;"
             )
             self.grid.addWidget(header, 0, column)
         for row, (start, end) in enumerate(times, start=1):
             label = QLabel(f"{start}\n{end}")
             label.setAlignment(Qt.AlignCenter)
             label.setStyleSheet(
-                "color: var(--text-muted); background: var(--bg-secondary-light); "
-                "border-radius: 6px; padding: 8px 4px; font-size: 10px; font-weight: 700;"
+                "color: #475569; background: #FFFFFF; "
+                "border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px 4px; font-size: 10.5px; font-weight: 700;"
             )
             self.grid.addWidget(label, row, 0)
             for column, _day in enumerate(days, start=1):
@@ -157,8 +174,8 @@ class TimetableGridWidget(QFrame):
                 self.zones[(row - 1, column - 1)] = zone
                 self.grid.addWidget(zone, row, column)
                 self.grid.setColumnStretch(column, 1)
-            self.grid.setRowMinimumHeight(row, 76)
-        self.grid.setColumnMinimumWidth(0, 78)
+            self.grid.setRowMinimumHeight(row, 78)
+        self.grid.setColumnMinimumWidth(0, 80)
         for entry in entries:
             try:
                 row = times.index((entry.start_time, entry.end_time))
@@ -167,8 +184,8 @@ class TimetableGridWidget(QFrame):
                 continue
             zone = self.zones[(row, column)]
             lecture_type = entry.lecture_type if hasattr(entry, 'lecture_type') else "Theory"
-            colors_map = {"Theory": "#DDF3EC", "Practical": "#E3EEFB", "Lab": "#FFF0D8", "Tutorial": "#EEE7FA"}
-            card = LectureCard(entry, row, column, colors_map.get(lecture_type, "#E7F0F3"), zone)
+            colors_map = {"Theory": "#EFF6FF", "Practical": "#EEF2FF", "Lab": "#FFFBEB", "Tutorial": "#F5F3FF"}
+            card = LectureCard(entry, row, column, colors_map.get(lecture_type, "#EFF6FF"), zone)
             zone.layout = QVBoxLayout(zone)
             zone.layout.setContentsMargins(3, 3, 3, 3)
             zone.layout.addWidget(card)
@@ -177,9 +194,10 @@ class TimetableGridWidget(QFrame):
     def card_selected(self, entry_id):
         self.selected_entry_id = entry_id
         for card in self.cards.values():
-            card.setProperty("selected", card.entry_id == entry_id)
-            card.style().unpolish(card)
-            card.style().polish(card)
+            if card.entry_id == entry_id:
+                card.setStyleSheet(card._base_style + " QFrame#LectureCard { border: 2px solid #4F46E5; }")
+            else:
+                card.setStyleSheet(card._base_style)
 
     def emit_card_double_click(self, entry_id):
         self.selected_entry_id = entry_id

@@ -11,11 +11,14 @@ class TimeSlotView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(12)
         title = QLabel("Time Slots & Working Days")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
+        title.setObjectName("PageTitle")
         layout.addWidget(title)
+        sub = QLabel("Configure working days, custom durations and breaks.")
+        sub.setObjectName("PageSubtitle")
+        layout.addWidget(sub)
 
         # Working days group
         self.days_group = QGroupBox("Working Days (enable/disable)")
@@ -60,7 +63,7 @@ class TimeSlotView(QWidget):
         layout.addWidget(self.table)
 
         info = QLabel("Break periods cannot overlap with lectures. All slots are global (apply to all working days). Supports 30/45/60/90/120 min durations.")
-        info.setStyleSheet("color: #64748B; font-size: 11px;")
+        info.setObjectName("PageSubtitle")
         info.setWordWrap(True)
         layout.addWidget(info)
 

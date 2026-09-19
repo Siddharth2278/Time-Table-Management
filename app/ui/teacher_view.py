@@ -17,7 +17,7 @@ class TeacherView(QWidget):
         layout.setSpacing(10)
         top = QHBoxLayout()
         title = QLabel("Teachers")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
+        title.setObjectName("PageTitle")
         top.addWidget(title)
         top.addStretch()
         self.search = QLineEdit()
@@ -78,10 +78,11 @@ class TeacherView(QWidget):
                 self.table.setItem(r, 3, QTableWidgetItem(t.department or ""))
                 self.table.setItem(r, 4, QTableWidgetItem(t.designation or ""))
                 status_item = QTableWidgetItem(t.status or "")
+                from PySide6.QtGui import QColor as _QC
                 if t.status == "Active":
-                    status_item.setForeground(Qt.darkGreen)
+                    status_item.setForeground(_QC("#059669"))
                 else:
-                    status_item.setForeground(Qt.red)
+                    status_item.setForeground(_QC("#DC2626"))
                 self.table.setItem(r, 5, status_item)
                 for c in range(6):
                     it = self.table.item(r, c)
@@ -197,7 +198,7 @@ class TeacherView(QWidget):
             dlg.setMinimumSize(720, 400)
             layout = QVBoxLayout(dlg)
             info = QLabel(f"Teacher: {teacher.name if teacher else ''} | Total Lectures: {len(entries)}")
-            info.setStyleSheet("font-weight: 600; color: var(--text-primary);")
+            info.setObjectName("SectionTitle")
             layout.addWidget(info)
             tbl = QTableWidget(len(entries), 5)
             tbl.setHorizontalHeaderLabels(["Day", "Time", "Semester", "Subject", "Room"])

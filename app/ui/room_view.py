@@ -16,7 +16,7 @@ class RoomView(QWidget):
         layout.setSpacing(10)
         top = QHBoxLayout()
         title = QLabel("Rooms & Laboratories")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
+        title.setObjectName("PageTitle")
         top.addWidget(title)
         top.addStretch()
         self.search = QLineEdit()
@@ -84,10 +84,11 @@ class RoomView(QWidget):
                 self.table.setItem(r, 2, QTableWidgetItem(room.room_number))
                 self.table.setItem(r, 3, QTableWidgetItem(room.type))
                 status_item = QTableWidgetItem(room.status)
+                from PySide6.QtGui import QColor as _QC
                 if room.status == "Available":
-                    status_item.setForeground(Qt.darkGreen)
+                    status_item.setForeground(_QC("#059669"))
                 else:
-                    status_item.setForeground(Qt.red)
+                    status_item.setForeground(_QC("#DC2626"))
                 self.table.setItem(r, 4, status_item)
                 for c in range(5):
                     it = self.table.item(r, c)
