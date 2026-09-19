@@ -16,7 +16,7 @@ class SubjectView(QWidget):
         layout.setSpacing(10)
         top = QHBoxLayout()
         title = QLabel("Subjects")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
         top.addWidget(title)
         top.addStretch()
         self.search = QLineEdit()

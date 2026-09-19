@@ -26,7 +26,7 @@ class SemesterCard(QFrame):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
         title = QLabel(semester.name)
-        title.setStyleSheet("font-size: 16px; font-weight: 800; color: #1E2A3A; border: none;")
+        title.setStyleSheet("font-size: 16px; font-weight: 800; color: var(--text-primary); border: none;")
         layout.addWidget(title)
         status = QLabel(semester.status or "Active")
         status.setStyleSheet("font-size: 11px; color: #64748B; border: none;")

@@ -36,7 +36,7 @@ class DashboardView(QWidget):
         self.main_layout.setContentsMargins(20, 16, 20, 16)
         self.main_layout.setSpacing(14)
         title = QLabel("Dashboard")
-        title.setStyleSheet("font-size: 20px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 20px; font-weight: 800; color: var(--text-primary);")
         self.main_layout.addWidget(title)
         sub = QLabel("Overview of timetable, resources and completion status")
         sub.setStyleSheet("color: #64748B; font-size: 12px;")
@@ -51,7 +51,7 @@ class DashboardView(QWidget):
 
         # Semester completion section
         self.sem_label = QLabel("Semester Completion")
-        self.sem_label.setStyleSheet("font-size: 14px; font-weight: 700; color: #1E2A3A; margin-top: 6px;")
+        self.sem_label.setStyleSheet("font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 6px;")
         self.main_layout.addWidget(self.sem_label)
         self.sem_container = QWidget()
         self.sem_container.setStyleSheet("background: white; border: 1px solid #E2E8F0; border-radius: 12px;")
@@ -117,8 +117,8 @@ class DashboardView(QWidget):
                 bar.setValue(int(comp["completion_pct"]))
                 bar.setFormat(f"{comp['scheduled']}/{comp['required']}  {comp['completion_pct']}%")
                 bar.setStyleSheet("""
-                    QProgressBar { border: 1px solid #E2E8F0; border-radius: 8px; background: #F1F5F9; text-align: center; height: 18px; font-size: 11px; color: #1E2A3A; }
-                    QProgressBar::chunk { background-color: #2F5496; border-radius: 7px; }
+                    QProgressBar { border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-primary-light); text-align: center; height: 18px; font-size: 11px; color: var(--text-primary); }
+                    QProgressBar::chunk { background-color: var(--accent); border-radius: 7px; }
                 """)
                 pct_label = QLabel(f"{comp['completion_pct']}%")
                 pct_label.setMinimumWidth(50)

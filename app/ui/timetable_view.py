@@ -21,7 +21,7 @@ class TimetableView(QWidget):
         # Top bar
         top = QHBoxLayout()
         title = QLabel("Timetable Builder")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
         top.addWidget(title)
         top.addStretch()
         self.sem_combo = QComboBox()

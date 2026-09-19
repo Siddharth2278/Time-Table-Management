@@ -14,7 +14,7 @@ class TimeSlotView(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
         title = QLabel("Time Slots & Working Days")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
         layout.addWidget(title)
 
         # Working days group

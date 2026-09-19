@@ -197,7 +197,7 @@ class TeacherView(QWidget):
             dlg.setMinimumSize(720, 400)
             layout = QVBoxLayout(dlg)
             info = QLabel(f"Teacher: {teacher.name if teacher else ''} | Total Lectures: {len(entries)}")
-            info.setStyleSheet("font-weight: 600; color: #1E2A3A;")
+            info.setStyleSheet("font-weight: 600; color: var(--text-primary);")
             layout.addWidget(info)
             tbl = QTableWidget(len(entries), 5)
             tbl.setHorizontalHeaderLabels(["Day", "Time", "Semester", "Subject", "Room"])
