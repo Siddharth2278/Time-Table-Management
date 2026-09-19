@@ -1,8 +1,12 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QStackedWidget,
-    QFrame
+    QFrame, QGraphicsDropShadowEffect
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPixmap
+from pathlib import Path
+import math
+import sys
 
 from app.database import get_session, init_db
 from app.models import Setting
@@ -44,6 +48,65 @@ _ICONS = {
 }
 
 
+def logo_path() -> str:
+    """Resolve assets/logo.svg in dev and frozen (PyInstaller) layouts."""
+    candidates = []
+    try:
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            candidates.append(Path(base) / "assets" / "logo.svg")
+    except Exception:
+        pass
+    candidates.append(Path(__file__).resolve().parents[2] / "assets" / "logo.svg")
+    candidates.append(Path.cwd() / "assets" / "logo.svg")
+    for p in candidates:
+        try:
+            if p.exists():
+                return str(p)
+        except Exception:
+            continue
+    return ""
+
+
+class AnimatedLogo(QLabel):
+    """App logo with a soft pulsing glow so the brand feels alive."""
+
+    def __init__(self, size: int = 40, parent=None):
+        super().__init__(parent)
+        self._size = size
+        self.setFixedSize(size, size)
+        self.setAlignment(Qt.AlignCenter)
+        pm = QPixmap(logo_path())
+        if not pm.isNull():
+            self.setPixmap(pm.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            # Fallback gradient badge if the SVG cannot load
+            self.setText("CT")
+            self.setStyleSheet(
+                "color: #FFFFFF; font-size: 15px; font-weight: 900; "
+                "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4F46E5, stop:1 #D946EF); "
+                "border-radius: 11px;"
+            )
+        self._glow = QGraphicsDropShadowEffect(self)
+        self._glow.setOffset(0, 0)
+        self._glow.setBlurRadius(14)
+        self._glow.setColor(QColor(124, 58, 237, 200))
+        self.setGraphicsEffect(self._glow)
+        self._phase = 0.0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._pulse)
+        self._timer.start(70)
+
+    def _pulse(self):
+        self._phase += 0.09
+        t = (math.sin(self._phase) + 1.0) / 2.0  # 0..1
+        r = int(79 + (217 - 79) * t)
+        g = int(70 + (70 - 70) * t)
+        b = int(229 + (239 - 229) * t)
+        self._glow.setColor(QColor(r, g, b, 210))
+        self._glow.setBlurRadius(10 + int(12 * t))
+
+
 class Sidebar(QFrame):
     def __init__(self, on_select):
         super().__init__()
@@ -54,12 +117,25 @@ class Sidebar(QFrame):
         layout.setContentsMargins(6, 10, 6, 10)
         layout.setSpacing(1)
 
+        # Logo row: animated SVG mark + brand text
+        logo_row = QHBoxLayout()
+        logo_row.setContentsMargins(6, 2, 4, 2)
+        logo_row.setSpacing(10)
+        self.logo_icon = AnimatedLogo(40)
+        logo_row.addWidget(self.logo_icon)
+        self.brand_box = QWidget()
+        self.brand_box.setStyleSheet("background: transparent; border: none;")
+        brand_layout = QVBoxLayout(self.brand_box)
+        brand_layout.setContentsMargins(0, 2, 0, 2)
+        brand_layout.setSpacing(1)
         self.brand = QLabel("College Timetable")
         self.brand.setObjectName("SidebarBrand")
-        layout.addWidget(self.brand)
-        self.brand_sub = QLabel("Manager  •  Offline")
+        brand_layout.addWidget(self.brand)
+        self.brand_sub = QLabel("Manager  \u2022  Offline")
         self.brand_sub.setObjectName("SidebarSub")
-        layout.addWidget(self.brand_sub)
+        brand_layout.addWidget(self.brand_sub)
+        logo_row.addWidget(self.brand_box, 1)
+        layout.addLayout(logo_row)
 
         self.buttons = {}
         self._labels = {key: label for label, key, _ in SIDEBAR_ITEMS}
@@ -83,9 +159,8 @@ class Sidebar(QFrame):
 
     def set_compact(self, compact: bool):
         if compact:
-            self.setFixedWidth(60)
-            self.brand.setText("CT")
-            self.brand_sub.hide()
+            self.setFixedWidth(64)
+            self.brand_box.hide()
             for key, btn in self.buttons.items():
                 btn.setText(_ICONS.get(key, "•"))
                 btn.setToolTip(self._labels.get(key, key))
@@ -97,8 +172,7 @@ class Sidebar(QFrame):
             self.foot.hide()
         else:
             self.setFixedWidth(228)
-            self.brand.setText("College Timetable")
-            self.brand_sub.show()
+            self.brand_box.show()
             for key, btn in self.buttons.items():
                 btn.setText(f"{_ICONS.get(key, '')}   {self._labels.get(key, key)}")
                 btn.setToolTip("")
@@ -170,6 +244,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("College Timetable Manager")
         self.resize(1280, 780)
         self.setMinimumSize(1100, 650)
+        try:
+            icon_file = logo_path()
+            if icon_file:
+                self.setWindowIcon(QIcon(icon_file))
+        except Exception:
+            pass
         init_db()
         central = QWidget()
         central.setObjectName("AppRoot")

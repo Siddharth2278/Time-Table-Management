@@ -95,10 +95,10 @@ def _sidebar_qss() -> str:
     }}
     QLabel#SidebarBrand {{
         color: #FFFFFF;
-        font-size: 15px;
+        font-size: 14.5px;
         font-weight: 800;
         letter-spacing: -0.2px;
-        padding: 12px 10px 2px 10px;
+        padding: 0px;
         background: transparent;
         border: none;
     }}
@@ -106,7 +106,7 @@ def _sidebar_qss() -> str:
         color: #7C8DB0;
         font-size: 11px;
         font-weight: 600;
-        padding: 0px 10px 10px 10px;
+        padding: 0px;
         background: transparent;
         border: none;
     }}
