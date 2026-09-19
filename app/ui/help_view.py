@@ -15,11 +15,11 @@ class HelpView(QWidget):
 
         title_row = QHBoxLayout()
         title = QLabel("Help & How to Use")
-        title.setStyleSheet("font-size: 20px; font-weight: 800; color: #132A3A;")
+        title.setStyleSheet("font-size: 20px; font-weight: 800; color: var(--text-primary);")
         title_row.addWidget(title)
         title_row.addStretch()
         self.status = QLabel("Offline guide")
-        self.status.setStyleSheet("color: #176B57; font-weight: 700; background: #E8F3F0; padding: 6px 10px; border-radius: 6px;")
+        self.status.setStyleSheet("color: var(--success); font-weight: 700; background: var(--bg-success-light); padding: 6px 10px; border-radius: 6px;")
         title_row.addWidget(self.status)
         outer.addLayout(title_row)
 
@@ -87,7 +87,7 @@ class HelpView(QWidget):
                 label = QLabel(point)
                 label.setWordWrap(True)
                 label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                label.setStyleSheet("color: #29424F; font-size: 12px; padding: 2px 0;")
+                label.setStyleSheet("color: var(--text-primary); font-size: 12px; padding: 2px 0;")
                 group_layout.addWidget(label)
             layout.addWidget(group)
 

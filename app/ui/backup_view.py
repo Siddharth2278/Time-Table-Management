@@ -11,7 +11,7 @@ class BackupView(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(14)
         title = QLabel("Backup & Restore")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
         layout.addWidget(title)
         sub = QLabel("Keep your timetable safe. Backup stores a copy of the SQLite database. Restore will overwrite current data.")
         sub.setStyleSheet("color: #64748B; font-size: 11px;")

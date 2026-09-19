@@ -6,23 +6,17 @@ from app.models import Teacher, Subject, Room, TimetableEntry, Semester
 from app.services.conflict_service import ConflictService
 
 class StatCard(QFrame):
-    def __init__(self, title, value, color="#2F5496"):
+    def __init__(self, title, value, color="#3B82F6"):
         super().__init__()
         self.setObjectName("Card")
-        self.setStyleSheet(f"""
-            QFrame#Card {{
-                background-color: white;
-                border: 1px solid #E2E8F0;
-                border-radius: 12px;
-            }}
-        """)
+        # Theme styling applied via global QSS; no inline styles needed
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(4)
         # Icon color bar
         top = QHBoxLayout()
         dot = QLabel("●")
-        dot.setStyleSheet(f"color: {color}; font-size: 10px;")
+        # Color will be from global styles; set default via style sheet
         top.addWidget(dot)
         top.addStretch()
         layout.addLayout(top)

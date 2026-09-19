@@ -63,7 +63,7 @@ class SemesterView(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(12)
         title = QLabel("Semesters Overview")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
         layout.addWidget(title)
         sub = QLabel("Click a semester to open its timetable. Each semester has one timetable.")
         sub.setStyleSheet("color: #64748B; font-size: 12px;")

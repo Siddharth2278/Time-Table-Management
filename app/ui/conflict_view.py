@@ -11,10 +11,10 @@ class ConflictView(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
         title = QLabel("Conflict Dashboard")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #1E2A3A;")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
         layout.addWidget(title)
         sub = QLabel("Detects teacher, semester, room/lab conflicts and availability violations. All overlaps use: existingStart < newEnd AND existingEnd > newStart")
-        sub.setStyleSheet("color: #64748B; font-size: 11px;")
+        sub.setStyleSheet("color: var(--text-muted); font-size: 11px;")
         sub.setWordWrap(True)
         layout.addWidget(sub)
 
@@ -48,7 +48,7 @@ class ConflictView(QWidget):
 
         # Legend
         legend = QLabel("Types: Teacher • Semester • Room/Lab • Availability • Break • Subject Limit\nGreen = No conflicts  •  Red = Conflict found")
-        legend.setStyleSheet("color: #475569; font-size: 11px; background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px;")
+        legend.setStyleSheet("color: var(--text-muted); font-size: 11px; background: var(--bg-primary-light); border: 1px solid var(--border-light); border-radius: 8px; padding: 8px;")
         layout.addWidget(legend)
 
     def refresh(self):
@@ -82,10 +82,10 @@ class ConflictView(QWidget):
             total = len(conflicts) + len(avail_conflicts)
             if total == 0:
                 self.summary.setText("✓ No conflicts detected. Timetable is clean.")
-                self.summary.setStyleSheet("background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; padding: 10px; border-radius: 8px; font-weight: 700;")
+                self.summary.setStyleSheet("background: var(--bg-success-light); color: var(--success); border: 1px solid var(--border-success); padding: 10px; border-radius: 8px; font-weight: 700;")
             else:
                 self.summary.setText(f"⚠ {total} conflict(s) found: {len(conflicts)} scheduling + {len(avail_conflicts)} availability/break")
-                self.summary.setStyleSheet("background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; padding: 10px; border-radius: 8px; font-weight: 700;")
+                self.summary.setStyleSheet("background: var(--bg-error-light); color: var(--error); border: 1px solid var(--border-error); padding: 10px; border-radius: 8px; font-weight: 700;")
 
             # Combine into table
             self.table.setRowCount(total)
@@ -110,7 +110,10 @@ class ConflictView(QWidget):
                 # Color
                 for col in range(4):
                     it = self.table.item(row, col)
-                    it.setBackground(QColor("#FEE2E2"))
+                    if c["type"] in ("teacher", "semester", "room"):
+                        it.setBackground(QColor("#EFF6FF"))
+                    else:
+                        it.setBackground(QColor("#FEF9E7"))
                 row += 1
             for c in avail_conflicts:
                 typ = c["type"]
@@ -126,7 +129,7 @@ class ConflictView(QWidget):
                 self.table.setItem(row, 3, QTableWidgetItem(c["message"]))
                 for col in range(4):
                     it = self.table.item(row, col)
-                    it.setBackground(QColor("#FEF3C7"))
+                    it.setBackground(QColor("#FEF9E7"))
                 row += 1
             self.table.resizeRowsToContents()
         finally:
