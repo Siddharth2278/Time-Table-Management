@@ -232,9 +232,9 @@ class RoomView(QWidget):
                 tbl.setItem(r, 3, QTableWidgetItem(f"{e.subject.code if e.subject else ''} - {e.subject.name if e.subject else ''}"))
                 tbl.setItem(r, 4, QTableWidgetItem(e.teacher.name if e.teacher else ""))
             layout.addWidget(tbl)
-            btns = QDialogButtonBox(QDialogButtonBox.Close)
-            btns.rejected.connect(dlg.reject)
+            btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
             btns.accepted.connect(dlg.accept)
+            btns.rejected.connect(dlg.reject)
             layout.addWidget(btns)
             dlg.exec()
         finally:
