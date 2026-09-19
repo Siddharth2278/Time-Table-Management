@@ -259,6 +259,14 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         self.header = Header(toggle_callback=self.toggle_sidebar)
         root.addWidget(self.header)
+        # Vibrant gradient strip under the header
+        self.accent = QFrame()
+        self.accent.setFixedHeight(3)
+        self.accent.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, "
+            "stop:0.5 #8B5CF6, stop:1 #EC4899); border: none;"
+        )
+        root.addWidget(self.accent)
         body = QWidget()
         body.setObjectName("ContentArea")
         body_layout = QHBoxLayout(body)
@@ -318,6 +326,11 @@ class MainWindow(QMainWindow):
                     view.refresh()
                 except Exception as e:
                     print(f"Refresh error for {key}: {e}")
+            try:
+                from app.ui.animations import fade_in
+                fade_in(view, 200)
+            except Exception:
+                pass
             if key != "Settings":
                 self.header.refresh()
         self.sidebar.set_active(key)

@@ -136,7 +136,7 @@ def _sidebar_qss() -> str:
         color: #FFFFFF;
     }}
     QWidget#Sidebar QPushButton:checked {{
-        background-color: {INDIGO};
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {INDIGO}, stop:1 #7C3AED);
         color: #FFFFFF;
         font-weight: 700;
     }}

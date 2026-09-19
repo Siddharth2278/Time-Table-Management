@@ -6,29 +6,55 @@ from app.services.conflict_service import ConflictService
 
 
 class StatCard(QFrame):
-    def __init__(self, title, value, accent="#4F46E5"):
+    """Vibrant gradient stat card with white text — readable in any theme."""
+
+    def __init__(self, title, value, gradient=("#4F46E5", "#8B5CF6")):
         super().__init__()
-        self.setObjectName("Card")
+        self.setObjectName("VibrantCard")
+        c1, c2 = gradient
+        self.setStyleSheet(
+            f"QFrame#VibrantCard {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            f"stop:0 {c1}, stop:1 {c2}); border: none; border-radius: 14px; padding: 14px; }}"
+        )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(4)
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         dot = QLabel("\u25cf")
-        dot.setStyleSheet(f"color: {accent}; font-size: 14px; background: transparent; border: none;")
+        dot.setStyleSheet("color: rgba(255, 255, 255, 0.85); font-size: 14px; background: transparent; border: none;")
         top.addWidget(dot)
         top.addStretch()
         layout.addLayout(top)
-        val_label = QLabel(str(value))
-        val_label.setObjectName("StatValue")
-        layout.addWidget(val_label)
+        self.val_label = QLabel("0")
+        self.val_label.setStyleSheet(
+            "color: #FFFFFF; font-size: 30px; font-weight: 800; "
+            "background: transparent; border: none; letter-spacing: -0.5px;"
+        )
+        layout.addWidget(self.val_label)
         title_label = QLabel(title.upper())
-        title_label.setObjectName("StatLabel")
+        title_label.setStyleSheet(
+            "color: rgba(255, 255, 255, 0.88); font-size: 11px; font-weight: 700; "
+            "background: transparent; border: none; letter-spacing: 0.7px;"
+        )
         layout.addWidget(title_label)
         self.setMinimumHeight(104)
         self.setMinimumWidth(150)
-        # Accent top border via stylesheet addition (kept subtle, theme-safe)
-        self.setStyleSheet(self.styleSheet() + f" QFrame#Card {{ border-top: 3px solid {accent}; }}")
+        self._target = value
+
+    def play(self, delay: int = 0):
+        from app.ui.animations import count_up
+        count_up(self.val_label, self._target, delay=delay)
+
+
+CARD_GRADIENTS = [
+    ("#4F46E5", "#8B5CF6"),
+    ("#0EA5E9", "#6366F1"),
+    ("#059669", "#34D399"),
+    ("#D97706", "#F59E0B"),
+    ("#7C3AED", "#D946EF"),
+    ("#DC2626", "#F97316"),
+]
 
 
 class DashboardView(QWidget):
@@ -94,16 +120,22 @@ class DashboardView(QWidget):
             unscheduled = max(0, required_total - total_lectures)
             conflicts = ConflictService.detect_all_conflicts(session)
             cards = [
-                ("Total Teachers", total_teachers, "#4F46E5"),
-                ("Total Subjects", total_subjects, "#0EA5E9"),
-                ("Classrooms", total_rooms, "#059669"),
-                ("Laboratories", total_labs, "#D97706"),
-                ("Scheduled Lectures", total_lectures, "#7C3AED"),
-                ("Unscheduled", unscheduled, "#DC2626" if unscheduled else "#059669"),
+                ("Total Teachers", total_teachers),
+                ("Total Subjects", total_subjects),
+                ("Classrooms", total_rooms),
+                ("Laboratories", total_labs),
+                ("Scheduled Lectures", total_lectures),
+                ("Unscheduled", unscheduled),
             ]
-            for idx, (title, val, color) in enumerate(cards):
-                card = StatCard(title, val, color)
+            made = []
+            for idx, (title, val) in enumerate(cards):
+                card = StatCard(title, val, CARD_GRADIENTS[idx % len(CARD_GRADIENTS)])
                 self.stats_layout.addWidget(card, idx // 3, idx % 3)
+                made.append(card)
+            from app.ui.animations import stagger_in
+            stagger_in(made)
+            for i, card in enumerate(made):
+                card.play(delay=60 + i * 70)
             for sem in sems:
                 comp = ConflictService.calculate_timetable_completion(session, sem.id)
                 row = QHBoxLayout()

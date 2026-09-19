@@ -4,22 +4,27 @@ from app.database import get_session
 from app.models import Semester, Subject, TimetableEntry
 from app.services.conflict_service import ConflictService
 
+SEM_ACCENTS = ["#4F46E5", "#0EA5E9", "#059669", "#D97706", "#7C3AED", "#DB2777"]
+
+
 class SemesterCard(QFrame):
     clicked = Signal(int)
-    def __init__(self, semester, completion):
+    def __init__(self, semester, completion, accent="#4F46E5"):
         super().__init__()
         self.semester_id = semester.id
         self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet("""
-            QFrame {
+        self.setStyleSheet(f"""
+            QFrame {{
                 background: #FFFFFF;
                 border: 1px solid #E2E8F0;
+                border-top: 4px solid {accent};
                 border-radius: 14px;
-            }
-            QFrame:hover {
-                border: 1.5px solid #4F46E5;
+            }}
+            QFrame:hover {{
+                border: 1.5px solid {accent};
+                border-top: 4px solid {accent};
                 background: #F8FAFC;
-            }
+            }}
         """)
         self.setCursor(Qt.PointingHandCursor)
         layout = QVBoxLayout(self)
@@ -45,7 +50,7 @@ class SemesterCard(QFrame):
         detail.setStyleSheet("font-size: 11px; color: #475569; border: none; background: transparent;")
         layout.addWidget(detail)
         hint = QLabel("Click to open timetable \u2192")
-        hint.setStyleSheet("font-size: 11px; color: #4F46E5; font-weight: 700; border: none; background: transparent;")
+        hint.setStyleSheet(f"font-size: 11px; color: {accent}; font-weight: 700; border: none; background: transparent;")
         layout.addWidget(hint)
         self.setMinimumHeight(140)
         self.setMinimumWidth(220)
@@ -99,12 +104,16 @@ class SemesterView(QWidget):
         session = get_session()
         try:
             sems = session.query(Semester).order_by(Semester.id).all()
+            made = []
             for idx, sem in enumerate(sems):
                 comp = ConflictService.calculate_timetable_completion(session, sem.id)
-                card = SemesterCard(sem, comp)
+                card = SemesterCard(sem, comp, SEM_ACCENTS[idx % len(SEM_ACCENTS)])
                 card.clicked.connect(self.openTimetable.emit)
                 row = idx // 3
                 col = idx % 3
                 self.cards_layout.addWidget(card, row, col)
+                made.append(card)
+            from app.ui.animations import stagger_in
+            stagger_in(made)
         finally:
             session.close()
