@@ -80,8 +80,12 @@ def _common() -> str:
         letter-spacing: 0.7px;
     }}
     QFrame#ContentCard {{
-        border-radius: 14px;
+        border-radius: 12px;
         padding: 14px;
+    }}
+    QFrame#StatCard {{
+        border-radius: 12px;
+        padding: 12px;
     }}
     """
 
@@ -204,7 +208,11 @@ def _light_qss() -> str:
     QLabel#StatLabel {{ color: #64748B; background: transparent; }}
     QFrame#ContentCard {{
         background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
+        border: 1px solid #DCE4EF;
+    }}
+    QFrame#StatCard {{
+        background-color: #FFFFFF;
+        border: 1px solid #DCE4EF;
     }}
     QFrame#Card {{
         background-color: #FFFFFF;
@@ -458,6 +466,10 @@ def _dark_qss() -> str:
     QLabel#StatValue {{ color: #F1F5F9; background: transparent; }}
     QLabel#StatLabel {{ color: #94A3B8; background: transparent; }}
     QFrame#ContentCard {{
+        background-color: #141F38;
+        border: 1px solid #22304D;
+    }}
+    QFrame#StatCard {{
         background-color: #141F38;
         border: 1px solid #22304D;
     }}
