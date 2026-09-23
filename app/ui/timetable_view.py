@@ -32,7 +32,7 @@ class TimetableView(QWidget):
         top.addWidget(sem_lbl)
         top.addWidget(self.sem_combo)
         layout.addLayout(top)
-        sub = QLabel("Add lectures, drag cards to move them. Any clash is blocked with a direct message.")
+        sub = QLabel("Build a conflict-free weekly schedule. Select a cell to add a lecture or double-click an existing lecture to edit it.")
         sub.setObjectName("PageSubtitle")
         layout.addWidget(sub)
 

@@ -6,39 +6,21 @@ from app.services.conflict_service import ConflictService
 
 
 class StatCard(QFrame):
-    """Vibrant gradient stat card with white text — readable in any theme."""
+    """Compact metric card designed for quick scanning."""
 
-    def __init__(self, title, value, gradient=("#4F46E5", "#8B5CF6")):
+    def __init__(self, title, value, gradient=None):
         super().__init__()
-        self.setObjectName("VibrantCard")
-        c1, c2 = gradient
-        self.setStyleSheet(
-            f"QFrame#VibrantCard {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-            f"stop:0 {c1}, stop:1 {c2}); border: none; border-radius: 14px; padding: 14px; }}"
-        )
+        self.setObjectName("StatCard")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(4)
-        top = QHBoxLayout()
-        top.setContentsMargins(0, 0, 0, 0)
-        dot = QLabel("\u25cf")
-        dot.setStyleSheet("color: rgba(255, 255, 255, 0.85); font-size: 14px; background: transparent; border: none;")
-        top.addWidget(dot)
-        top.addStretch()
-        layout.addLayout(top)
         self.val_label = QLabel("0")
-        self.val_label.setStyleSheet(
-            "color: #FFFFFF; font-size: 30px; font-weight: 800; "
-            "background: transparent; border: none; letter-spacing: -0.5px;"
-        )
+        self.val_label.setObjectName("StatValue")
         layout.addWidget(self.val_label)
-        title_label = QLabel(title.upper())
-        title_label.setStyleSheet(
-            "color: rgba(255, 255, 255, 0.88); font-size: 11px; font-weight: 700; "
-            "background: transparent; border: none; letter-spacing: 0.7px;"
-        )
+        title_label = QLabel(title)
+        title_label.setObjectName("StatLabel")
         layout.addWidget(title_label)
-        self.setMinimumHeight(104)
+        self.setMinimumHeight(92)
         self.setMinimumWidth(150)
         self._target = value
 

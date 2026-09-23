@@ -1,11 +1,10 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QStackedWidget,
-    QFrame, QGraphicsDropShadowEffect
+    QFrame
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap
 from pathlib import Path
-import math
 import sys
 
 from app.database import get_session, init_db
@@ -87,24 +86,6 @@ class AnimatedLogo(QLabel):
                 "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4F46E5, stop:1 #D946EF); "
                 "border-radius: 11px;"
             )
-        self._glow = QGraphicsDropShadowEffect(self)
-        self._glow.setOffset(0, 0)
-        self._glow.setBlurRadius(14)
-        self._glow.setColor(QColor(124, 58, 237, 200))
-        self.setGraphicsEffect(self._glow)
-        self._phase = 0.0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._pulse)
-        self._timer.start(70)
-
-    def _pulse(self):
-        self._phase += 0.09
-        t = (math.sin(self._phase) + 1.0) / 2.0  # 0..1
-        r = int(79 + (217 - 79) * t)
-        g = int(70 + (70 - 70) * t)
-        b = int(229 + (239 - 229) * t)
-        self._glow.setColor(QColor(r, g, b, 210))
-        self._glow.setBlurRadius(10 + int(12 * t))
 
 
 class Sidebar(QFrame):
@@ -259,13 +240,9 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         self.header = Header(toggle_callback=self.toggle_sidebar)
         root.addWidget(self.header)
-        # Vibrant gradient strip under the header
         self.accent = QFrame()
         self.accent.setFixedHeight(3)
-        self.accent.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, "
-            "stop:0.5 #8B5CF6, stop:1 #EC4899); border: none;"
-        )
+        self.accent.setStyleSheet("background: #4F46E5; border: none;")
         root.addWidget(self.accent)
         body = QWidget()
         body.setObjectName("ContentArea")
