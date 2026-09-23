@@ -224,7 +224,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("College Timetable Manager")
         self.resize(1280, 780)
-        self.setMinimumSize(1100, 650)
+        # Keep the desktop layout usable on smaller laptop displays.
+        self.setMinimumSize(900, 600)
         try:
             icon_file = logo_path()
             if icon_file:
