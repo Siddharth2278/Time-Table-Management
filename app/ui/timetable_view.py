@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog, QFrame
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog, QFrame, QMenu
 from PySide6.QtCore import Qt, QTime
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QAction
 from app.database import get_session
 from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
 from app.services.timetable_service import TimetableService

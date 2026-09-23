@@ -33,6 +33,20 @@ class DropZone(QFrame):
         self.reset_style()
         super().dragLeaveEvent(event)
 
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat("application/x-timetable-entry"):
+            event.ignore()
+            return
+        try:
+            entry_id = int(bytes(event.mimeData().data("application/x-timetable-entry")).decode())
+        except (TypeError, ValueError):
+            self.reset_style()
+            event.ignore()
+            return
+        self.reset_style()
+        self.drop_requested.emit(entry_id, self.row, self.column)
+        event.acceptProposedAction()
+
     def reset_style(self):
         self.setStyleSheet(
             "QFrame#DropZone { border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; }"
