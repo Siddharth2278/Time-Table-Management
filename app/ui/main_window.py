@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QStackedWidget,
-    QFrame
+    QFrame, QScrollArea
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
@@ -224,7 +224,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("College Timetable Manager")
         self.resize(1280, 780)
-        self.setMinimumSize(1100, 650)
+        self.setMinimumSize(960, 620)
         try:
             icon_file = logo_path()
             if icon_file:
@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
         self.key_to_index = {}
         self.views = {}
         for key, view in mapping.items():
-            idx = self.stack.addWidget(view)
+            idx = self.stack.addWidget(self._wrap_page(view))
             self.key_to_index[key] = idx
             self.views[key] = view
 
@@ -292,6 +292,18 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(self.key_to_index["Dashboard"])
         self.header.refresh()
         self.dashboard.refresh()
+
+    @staticmethod
+    def _wrap_page(view: QWidget) -> QScrollArea:
+        """Keep each page isolated and scrollable at smaller window sizes."""
+        scroll = QScrollArea()
+        scroll.setObjectName("PageScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setWidget(view)
+        return scroll
 
     def on_navigate(self, key):
         idx = self.key_to_index.get(key)
@@ -339,6 +351,8 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self.setStyleSheet(get_theme_qss(theme))
+        if hasattr(self, "timetable"):
+            self.timetable.grid.set_theme(theme == "dark")
 
     def toggle_sidebar(self):
         self.sidebar_expanded = not getattr(self, 'sidebar_expanded', True)

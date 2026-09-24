@@ -31,6 +31,13 @@ def _common() -> str:
         padding: 6px 10px;
         font-size: 12px;
     }}
+    QScrollArea#PageScroll {{
+        border: none;
+        background: transparent;
+    }}
+    QScrollArea#PageScroll > QWidget > QWidget {{
+        background: transparent;
+    }}
     QScrollBar:vertical {{
         background: transparent;
         width: 10px;

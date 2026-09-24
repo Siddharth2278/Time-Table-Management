@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QPixmap
 from app.database import get_session
@@ -37,49 +37,51 @@ class TimetableView(QWidget):
         layout.addWidget(sub)
 
         # Actions bar
-        actions = QHBoxLayout()
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(6)
+        actions.setVerticalSpacing(6)
         self.add_btn = QPushButton("＋ Add Lecture")
         self.add_btn.setObjectName("PrimaryButton")
         self.add_btn.clicked.connect(self.add_lecture)
-        actions.addWidget(self.add_btn)
+        actions.addWidget(self.add_btn, 0, 0)
         self.edit_btn = QPushButton("Edit")
         self.edit_btn.setObjectName("SecondaryButton")
         self.edit_btn.clicked.connect(self.edit_lecture)
-        actions.addWidget(self.edit_btn)
+        actions.addWidget(self.edit_btn, 0, 1)
         self.del_btn = QPushButton("Delete")
         self.del_btn.setObjectName("DangerButton")
         self.del_btn.clicked.connect(self.delete_lecture)
-        actions.addWidget(self.del_btn)
+        actions.addWidget(self.del_btn, 0, 2)
         self.generate_btn = QPushButton("Generate Timetable")
         self.generate_btn.setObjectName("PrimaryButton")
         self.generate_btn.clicked.connect(self.generate_timetable)
-        actions.addWidget(self.generate_btn)
+        actions.addWidget(self.generate_btn, 0, 3)
         self.format_btn = QPushButton("Format Photo")
         self.format_btn.setObjectName("SecondaryButton")
         self.format_btn.clicked.connect(self.choose_format_photo)
-        actions.addWidget(self.format_btn)
-        actions.addStretch()
+        actions.addWidget(self.format_btn, 0, 4)
         self.find_btn = QPushButton("Find Available Slot")
         self.find_btn.setObjectName("SecondaryButton")
         self.find_btn.clicked.connect(self.find_available)
-        actions.addWidget(self.find_btn)
+        actions.addWidget(self.find_btn, 1, 0)
         # Export
         self.export_csv_btn = QPushButton("Export CSV")
         self.export_csv_btn.setObjectName("SecondaryButton")
         self.export_csv_btn.clicked.connect(lambda: self.export("csv"))
-        actions.addWidget(self.export_csv_btn)
+        actions.addWidget(self.export_csv_btn, 1, 1)
         self.export_excel_btn = QPushButton("Excel")
         self.export_excel_btn.setObjectName("SecondaryButton")
         self.export_excel_btn.clicked.connect(lambda: self.export("excel"))
-        actions.addWidget(self.export_excel_btn)
+        actions.addWidget(self.export_excel_btn, 1, 2)
         self.export_pdf_btn = QPushButton("PDF")
         self.export_pdf_btn.setObjectName("SecondaryButton")
         self.export_pdf_btn.clicked.connect(lambda: self.export("pdf"))
-        actions.addWidget(self.export_pdf_btn)
+        actions.addWidget(self.export_pdf_btn, 1, 3)
         self.print_btn = QPushButton("Print")
         self.print_btn.setObjectName("SecondaryButton")
         self.print_btn.clicked.connect(lambda: self.export("pdf"))
-        actions.addWidget(self.print_btn)
+        actions.addWidget(self.print_btn, 1, 4)
+        actions.setColumnStretch(5, 1)
         layout.addLayout(actions)
 
         # Completion bar
@@ -502,77 +504,3 @@ class TimetableView(QWidget):
             except:
                 pass
             QMessageBox.critical(self, "Error", str(e))
-
-    def show_context(self, pos):
-        menu = QMenu(self)
-        add_act = QAction("Add Lecture (any time)", self)
-        add_act.triggered.connect(self.add_lecture)
-        menu.addAction(add_act)
-        edit_act = QAction("Edit Lecture", self)
-        edit_act.triggered.connect(self.edit_lecture)
-        menu.addAction(edit_act)
-        del_act = QAction("Delete Lecture", self)
-        del_act.triggered.connect(self.delete_lecture)
-        menu.addAction(del_act)
-        menu.addSeparator()
-        # Time slot edit for left column
-        idx = self.table.indexAt(pos)
-        if idx.isValid() and idx.column() == 0:
-            time_act = QAction("Edit This Time Slot", self)
-            time_act.triggered.connect(lambda: self.edit_time_slot(idx.row()))
-            menu.addAction(time_act)
-        find_act = QAction("Find Available Slot", self)
-        find_act.triggered.connect(self.find_available)
-        menu.addAction(find_act)
-        menu.exec(self.table.viewport().mapToGlobal(pos))
-
-    # Simple drag-drop handling: override eventFilter to capture drop
-    def eventFilter(self, obj, event):
-        from PySide6.QtCore import QEvent
-        if obj == self.table.viewport():
-            if event.type() == QEvent.Drop:
-                # Handle move
-                self.handle_drop(event)
-                return True
-            elif event.type() == QEvent.DragEnter:
-                event.accept()
-                return True
-            elif event.type() == QEvent.DragMove:
-                event.accept()
-                return True
-        return super().eventFilter(obj, event)
-
-    def handle_drop(self, event):
-        # Get source item id and target cell
-        # For simplicity, we don't have drag source id via mime, so use selected entry
-        eid = self._selected_entry_id()
-        if not eid:
-            return
-        pos = event.position().toPoint() if hasattr(event.position(), 'toPoint') else event.pos()
-        target = self.table.indexAt(pos)
-        if not target.isValid():
-            return
-        row = target.row()
-        col = target.column()
-        if col == 0:
-            return
-        if row < 0 or row >= len(self._times):
-            return
-        new_start, new_end = self._times[row]
-        day_id = self._days[col-1].id if col-1 < len(self._days) else None
-        if not day_id:
-            return
-        session = get_session()
-        try:
-            ok, result = TimetableService.move_entry(session, eid, day_id, new_start, new_end)
-            if ok:
-                self.clear_conflict_notice()
-                QMessageBox.information(self, "Moved", f"Lecture moved to {self._days[col-1].name} {new_start}-{new_end}")
-                self.load_timetable()
-            else:
-                msgs = "\n".join([c.message for c in result])
-                self.show_conflict_notice(msgs)
-                QMessageBox.critical(self, "Move Failed - Conflict", msgs)
-        finally:
-            session.close()
-        event.accept()
