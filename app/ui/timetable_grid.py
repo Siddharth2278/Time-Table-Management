@@ -14,6 +14,7 @@ class DropZone(QFrame):
         self.setAcceptDrops(True)
         self.setMinimumHeight(78)
         self.setObjectName("DropZone")
+        self.dark_mode = False
         self.reset_style()
 
     def mousePressEvent(self, event):
@@ -33,10 +34,36 @@ class DropZone(QFrame):
         self.reset_style()
         super().dragLeaveEvent(event)
 
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-timetable-entry"):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Emit the dragged entry and target cell to the timetable view."""
+        if not event.mimeData().hasFormat("application/x-timetable-entry"):
+            event.ignore()
+            return
+        try:
+            entry_id = int(bytes(event.mimeData().data("application/x-timetable-entry")).decode())
+        except (TypeError, ValueError):
+            event.ignore()
+            self.reset_style()
+            return
+        self.drop_requested.emit(entry_id, self.row, self.column)
+        self.reset_style()
+        event.acceptProposedAction()
+
     def reset_style(self):
-        self.setStyleSheet(
-            "QFrame#DropZone { border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; }"
-        )
+        if self.dark_mode:
+            self.setStyleSheet("QFrame#DropZone { border: 1px solid #2A3A5C; border-radius: 8px; background: #141F38; }")
+        else:
+            self.setStyleSheet("QFrame#DropZone { border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; }")
+
+    def set_theme(self, dark_mode):
+        self.dark_mode = dark_mode
+        self.reset_style()
 
     def set_drop_feedback(self, valid):
         if valid:
@@ -66,13 +93,9 @@ class LectureCard(QFrame):
         self.setCursor(Qt.OpenHandCursor)
         self.setMinimumHeight(66)
         lecture_type = getattr(entry, "lecture_type", "Theory") or "Theory"
-        bg, accent = self.ACCENTS.get(lecture_type, ("#EFF6FF", "#2563EB"))
-        self._base_style = (
-            f"QFrame#LectureCard {{ background: {bg}; border: 1px solid #E2E8F0; "
-            f"border-left: 4px solid {accent}; border-radius: 8px; padding: 6px; }} "
-            f"QFrame#LectureCard:hover {{ border: 1px solid {accent}; border-left: 4px solid {accent}; }}"
-        )
-        self.setStyleSheet(self._base_style)
+        self.lecture_type = lecture_type
+        self._dark_mode = False
+        self._apply_style()
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(10)
         shadow.setOffset(0, 2)
@@ -82,16 +105,45 @@ class LectureCard(QFrame):
         layout.setContentsMargins(9, 7, 7, 7)
         layout.setSpacing(2)
         subject = QLabel(f"{entry.subject.code if entry.subject else ''}  {entry.subject.name if entry.subject else 'Untitled'}")
-        subject.setStyleSheet("color: #0F172A; font-weight: 800; font-size: 11.5px; background: transparent; border: none;")
+        self.subject_label = subject
+        subject.setStyleSheet(self._label_style("#F8FAFC", "#0F172A", "800", "11.5px"))
         subject.setWordWrap(True)
         teacher = QLabel(entry.teacher.name if entry.teacher else "Unassigned teacher")
-        teacher.setStyleSheet("color: #475569; font-size: 10.5px; font-weight: 600; background: transparent; border: none;")
+        self.teacher_label = teacher
+        teacher.setStyleSheet(self._label_style("#CBD5E1", "#475569", "600", "10.5px"))
         room = QLabel(f"{entry.room.name if entry.room else 'No room'}  \u00b7  {entry.start_time}-{entry.end_time}")
-        room.setStyleSheet("color: #64748B; font-size: 10px; background: transparent; border: none;")
+        self.room_label = room
+        room.setStyleSheet(self._label_style("#94A3B8", "#64748B", "500", "10px"))
         layout.addWidget(subject)
         layout.addWidget(teacher)
         layout.addWidget(room)
         self._drag_start = QPoint()
+
+    def _label_style(self, dark_color, light_color, weight, size):
+        color = dark_color if self._dark_mode else light_color
+        return f"color: {color}; font-size: {size}; font-weight: {weight}; background: transparent; border: none;"
+
+    def _apply_style(self):
+        bg, accent = self.ACCENTS.get(self.lecture_type, ("#EFF6FF", "#2563EB"))
+        if self._dark_mode:
+            bg = {"#EFF6FF": "#172554", "#EEF2FF": "#1E1B4B", "#FFFBEB": "#422006", "#F5F3FF": "#2E1065"}.get(bg, "#172554")
+            border = "#334155"
+        else:
+            border = "#E2E8F0"
+        self._base_style = (
+            f"QFrame#LectureCard {{ background: {bg}; border: 1px solid {border}; "
+            f"border-left: 4px solid {accent}; border-radius: 8px; padding: 6px; }} "
+            f"QFrame#LectureCard:hover {{ border: 1px solid {accent}; border-left: 4px solid {accent}; }}"
+        )
+        self.setStyleSheet(self._base_style)
+        if hasattr(self, "subject_label"):
+            self.subject_label.setStyleSheet(self._label_style("#F8FAFC", "#0F172A", "800", "11.5px"))
+            self.teacher_label.setStyleSheet(self._label_style("#CBD5E1", "#475569", "600", "10.5px"))
+            self.room_label.setStyleSheet(self._label_style("#94A3B8", "#64748B", "500", "10px"))
+
+    def set_theme(self, dark_mode):
+        self._dark_mode = dark_mode
+        self._apply_style()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -133,9 +185,20 @@ class TimetableGridWidget(QFrame):
         self.cards = {}
         self.selected_entry_id = None
         self.selected_slot = (-1, -1)
-        self.setStyleSheet(
-            "QFrame#TimetableGrid { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; }"
-        )
+        self.dark_mode = False
+        self._apply_grid_style()
+
+    def _apply_grid_style(self):
+        if self.dark_mode:
+            self.setStyleSheet("QFrame#TimetableGrid { background: #0F172A; border: 1px solid #22304D; border-radius: 12px; }")
+        else:
+            self.setStyleSheet("QFrame#TimetableGrid { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; }")
+
+    def set_theme(self, dark_mode):
+        self.dark_mode = dark_mode
+        self._apply_grid_style()
+        for card in self.cards.values():
+            card.set_theme(dark_mode)
 
     def clear_grid(self):
         while self.grid.count():
@@ -154,21 +217,22 @@ class TimetableGridWidget(QFrame):
         for column, label in enumerate(headers):
             header = QLabel(label)
             header.setAlignment(Qt.AlignCenter)
-            header.setStyleSheet(
-                "color: #312E81; background: #EEF2FF; "
-                "border: 1px solid #E0E7FF; border-radius: 8px; padding: 10px 5px; font-size: 10.5px; font-weight: 800;"
-            )
+            if self.dark_mode:
+                header.setStyleSheet("color: #E0E7FF; background: #1E1B4B; border: 1px solid #3730A3; border-radius: 8px; padding: 10px 5px; font-size: 10.5px; font-weight: 800;")
+            else:
+                header.setStyleSheet("color: #312E81; background: #EEF2FF; border: 1px solid #E0E7FF; border-radius: 8px; padding: 10px 5px; font-size: 10.5px; font-weight: 800;")
             self.grid.addWidget(header, 0, column)
         for row, (start, end) in enumerate(times, start=1):
             label = QLabel(f"{start}\n{end}")
             label.setAlignment(Qt.AlignCenter)
-            label.setStyleSheet(
-                "color: #475569; background: #FFFFFF; "
-                "border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px 4px; font-size: 10.5px; font-weight: 700;"
-            )
+            if self.dark_mode:
+                label.setStyleSheet("color: #CBD5E1; background: #141F38; border: 1px solid #22304D; border-radius: 8px; padding: 8px 4px; font-size: 10.5px; font-weight: 700;")
+            else:
+                label.setStyleSheet("color: #475569; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px 4px; font-size: 10.5px; font-weight: 700;")
             self.grid.addWidget(label, row, 0)
             for column, _day in enumerate(days, start=1):
                 zone = DropZone(row - 1, column - 1, self)
+                zone.set_theme(self.dark_mode)
                 zone.clicked.connect(self.slot_clicked)
                 zone.drop_requested.connect(self.drop_requested)
                 self.zones[(row - 1, column - 1)] = zone
@@ -186,6 +250,7 @@ class TimetableGridWidget(QFrame):
             lecture_type = entry.lecture_type if hasattr(entry, 'lecture_type') else "Theory"
             colors_map = {"Theory": "#EFF6FF", "Practical": "#EEF2FF", "Lab": "#FFFBEB", "Tutorial": "#F5F3FF"}
             card = LectureCard(entry, row, column, colors_map.get(lecture_type, "#EFF6FF"), zone)
+            card.set_theme(self.dark_mode)
             zone.layout = QVBoxLayout(zone)
             zone.layout.setContentsMargins(3, 3, 3, 3)
             zone.layout.addWidget(card)
