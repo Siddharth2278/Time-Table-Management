@@ -246,17 +246,10 @@ class LectureDialog(QDialog):
         # Subject - filtered by semester
         self.subj_combo = QComboBox()
         self._populate_subjects()
-        self.sem_combo.currentIndexChanged.connect(self._populate_subjects)
-        self.subj_combo.currentIndexChanged.connect(self._on_subject_changed)
         if entry:
             idx = self.subj_combo.findData(entry.subject_id)
             if idx >= 0:
                 self.subj_combo.setCurrentIndex(idx)
-            # Ensure auto teacher/room for existing entry is already set, but trigger to sync type
-            self._on_subject_changed()
-        else:
-            # For new lecture, auto-select teacher/room of first subject
-            self._on_subject_changed()
         # Teacher
         self.teacher_combo = QComboBox()
         teachers = self.session.query(Teacher).filter(Teacher.status=="Active").order_by(Teacher.name).all()
@@ -314,6 +307,12 @@ class LectureDialog(QDialog):
         if entry and entry.lecture_type:
             self.type_combo.setCurrentText(entry.lecture_type)
 
+        # Connect subject changes only after every dependent widget exists. The
+        # previous order silently swallowed AttributeError and left new lectures
+        # with the first teacher/room instead of the subject assignment.
+        self.sem_combo.currentIndexChanged.connect(self._populate_subjects)
+        self.subj_combo.currentIndexChanged.connect(self._on_subject_changed)
+
         form.addRow("Semester*:", self.sem_combo)
         form.addRow("Subject*:", self.subj_combo)
         form.addRow("Teacher*:", self.teacher_combo)
@@ -329,6 +328,9 @@ class LectureDialog(QDialog):
         self.info_label.setWordWrap(True)
         self.info_label.setStyleSheet("color: #DC2626; font-size: 11px;")
         layout.addWidget(self.info_label)
+
+        if not self.entry:
+            self._on_subject_changed()
 
         btn_layout = QHBoxLayout()
         self.find_btn = QPushButton("Find Available Slot")
@@ -356,12 +358,15 @@ class LectureDialog(QDialog):
         except:
             pass
         self.subj_combo.blockSignals(False)
-        # Auto-select teacher/room for first subject if not editing
-        if not self.entry and self.subj_combo.count() > 0:
+        # Auto-select teacher/room for first subject only after the dependent
+        # controls have been constructed.
+        if not self.entry and self.subj_combo.count() > 0 and hasattr(self, "teacher_combo"):
             self._on_subject_changed()
 
     def _on_subject_changed(self, idx=None):
         # Auto-select teacher/room/type when subject changes — specific, no manual teacher pick needed
+        if not hasattr(self, "teacher_combo") or not hasattr(self, "room_combo") or not hasattr(self, "type_combo"):
+            return
         subj_id = self.subj_combo.currentData()
         if not subj_id:
             return
@@ -369,21 +374,22 @@ class LectureDialog(QDialog):
             subj = self.session.query(Subject).filter(Subject.id==subj_id).first()
             if not subj:
                 return
-            # Only auto-set if not editing existing lecture? For edit, still sync but allow override — we auto-set every time for simplicity
-            if subj.teacher_id:
+            # Existing lectures may intentionally use an override, so automatic
+            # resource assignment is limited to new lectures.
+            if not self.entry and subj.teacher_id:
                 ti = self.teacher_combo.findData(subj.teacher_id)
                 if ti >= 0:
                     self.teacher_combo.blockSignals(True)
                     self.teacher_combo.setCurrentIndex(ti)
                     self.teacher_combo.blockSignals(False)
-            if subj.room_id:
+            if not self.entry and subj.room_id:
                 ri = self.room_combo.findData(subj.room_id)
                 if ri >= 0:
                     self.room_combo.blockSignals(True)
                     self.room_combo.setCurrentIndex(ri)
                     self.room_combo.blockSignals(False)
             # Map subject type to lecture type
-            if subj.subject_type:
+            if not self.entry and subj.subject_type:
                 lt = subj.subject_type
                 # Normalize: subject Lab -> Lab, Practical -> Practical
                 idx_lt = self.type_combo.findText(lt)
@@ -404,9 +410,9 @@ class LectureDialog(QDialog):
                     self.info_label.setStyleSheet("color: #065F46; font-size: 11px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px;")
                 except:
                     pass
-            else:
+            elif self.entry:
                 # For edit, just show hint
-                self.info_label.setText(f"Selected: {subj.code} — {subj.name} | Auto teacher: {self.teacher_combo.currentText()}")
+                self.info_label.setText(f"Selected: {subj.code} — {subj.name} | Teacher: {self.teacher_combo.currentText()} | Room: {self.room_combo.currentText()}")
                 self.info_label.setStyleSheet("color: #334155; font-size: 11px;")
         except Exception:
             pass
