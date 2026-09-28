@@ -92,7 +92,8 @@ class Sidebar(QFrame):
     def __init__(self, on_select):
         super().__init__()
         self.setObjectName("Sidebar")
-        self.setFixedWidth(228)
+        self.setFixedWidth(248)
+        self.setMinimumWidth(248)
         self.on_select = on_select
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 10, 6, 10)
@@ -140,7 +141,8 @@ class Sidebar(QFrame):
 
     def set_compact(self, compact: bool):
         if compact:
-            self.setFixedWidth(64)
+            self.setFixedWidth(72)
+            self.setMinimumWidth(72)
             self.brand_box.hide()
             for key, btn in self.buttons.items():
                 btn.setText(_ICONS.get(key, "•"))
@@ -152,7 +154,8 @@ class Sidebar(QFrame):
                     w.hide()
             self.foot.hide()
         else:
-            self.setFixedWidth(228)
+            self.setFixedWidth(248)
+            self.setMinimumWidth(248)
             self.brand_box.show()
             for key, btn in self.buttons.items():
                 btn.setText(f"{_ICONS.get(key, '')}   {self._labels.get(key, key)}")
