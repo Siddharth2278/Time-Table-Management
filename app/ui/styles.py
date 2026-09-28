@@ -50,10 +50,10 @@ def _common() -> str:
     }}
     QScrollArea#PageScroll {{
         border: none;
-        background: transparent;
+        background: #FAF9F6;
     }}
     QScrollArea#PageScroll > QWidget > QWidget {{
-        background: transparent;
+        background: #FAF9F6;
     }}
     QScrollBar:vertical {{
         background: transparent;

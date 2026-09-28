@@ -311,6 +311,8 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        scroll.setAutoFillBackground(True)
         scroll.setWidget(view)
         return scroll
 
@@ -324,11 +326,6 @@ class MainWindow(QMainWindow):
                     view.refresh()
                 except Exception as e:
                     print(f"Refresh error for {key}: {e}")
-            try:
-                from app.ui.animations import fade_in
-                fade_in(view, 200)
-            except Exception:
-                pass
             if key != "Settings":
                 self.header.refresh()
         self.sidebar.set_active(key)
