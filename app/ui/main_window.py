@@ -175,7 +175,7 @@ class Sidebar(QFrame):
 
 
 class Header(QFrame):
-    def __init__(self, toggle_callback=None):
+    def __init__(self, toggle_callback=None, export_callback=None):
         super().__init__()
         self.setObjectName("Header")
         self.setFixedHeight(62)
@@ -185,7 +185,7 @@ class Header(QFrame):
         if toggle_callback:
             self.toggle_btn = QPushButton("\u2630")
             self.toggle_btn.setObjectName("IconButton")
-            self.toggle_btn.setFixedSize(34, 32)
+            self.toggle_btn.setFixedSize(44, 44)
             self.toggle_btn.setToolTip("Collapse / expand sidebar")
             self.toggle_btn.clicked.connect(toggle_callback)
             layout.addWidget(self.toggle_btn)
@@ -203,6 +203,12 @@ class Header(QFrame):
         self.status = QLabel("\u25cf Offline Ready")
         self.status.setObjectName("StatusPill")
         layout.addWidget(self.status)
+        if export_callback:
+            self.export_btn = QPushButton("Export PDF")
+            self.export_btn.setObjectName("PrimaryButton")
+            self.export_btn.setToolTip("Export current timetable to PDF")
+            self.export_btn.clicked.connect(export_callback)
+            layout.addWidget(self.export_btn)
 
     def refresh(self):
         session = get_session()
@@ -238,7 +244,7 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        self.header = Header(toggle_callback=self.toggle_sidebar)
+        self.header = Header(toggle_callback=self.toggle_sidebar, export_callback=self.export_current_pdf)
         root.addWidget(self.header)
         self.accent = QFrame()
         self.accent.setFixedHeight(3)
@@ -357,6 +363,25 @@ class MainWindow(QMainWindow):
     def toggle_sidebar(self):
         self.sidebar_expanded = not getattr(self, 'sidebar_expanded', True)
         self.sidebar.set_compact(not self.sidebar_expanded)
+
+    def export_current_pdf(self):
+        # Global Publish: go to Timetable and export current semester
+        try:
+            self.on_navigate("Timetable")
+            self.timetable.export("pdf")
+        except Exception:
+            pass
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Mobile-representative: auto-compact sidebar on narrow widths
+        try:
+            narrow = self.width() < 900
+            if narrow != (not self.sidebar_expanded):
+                self.sidebar_expanded = not narrow
+                self.sidebar.set_compact(narrow)
+        except Exception:
+            pass
 
     def showEvent(self, event):
         super().showEvent(event)
