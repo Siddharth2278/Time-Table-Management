@@ -79,10 +79,10 @@ class DropZone(QFrame):
 
 class LectureCard(QFrame):
     ACCENTS = {
-        "Theory": ("#EFF6FF", "#2563EB"),
-        "Practical": ("#EEF2FF", "#4F46E5"),
-        "Lab": ("#FFFBEB", "#D97706"),
-        "Tutorial": ("#F5F3FF", "#7C3AED"),
+        "Theory": ("#FFFFFF", "#0F172A"),
+        "Practical": ("#FFFFFF", "#1E40AF"),
+        "Lab": ("#FFFFFF", "#D97706"),
+        "Tutorial": ("#FFFFFF", "#059669"),
     }
 
     def __init__(self, entry, row, column, color, parent=None):
@@ -125,16 +125,16 @@ class LectureCard(QFrame):
         return f"color: {color}; font-size: {size}; font-weight: {weight}; background: transparent; border: none;"
 
     def _apply_style(self):
-        bg, accent = self.ACCENTS.get(self.lecture_type, ("#EFF6FF", "#2563EB"))
+        bg, accent = self.ACCENTS.get(self.lecture_type, ("#FFFFFF", "#0F172A"))
         if self._dark_mode:
-            bg = {"#EFF6FF": "#172554", "#EEF2FF": "#1E1B4B", "#FFFBEB": "#422006", "#F5F3FF": "#2E1065"}.get(bg, "#172554")
-            border = "#334155"
+            bg = {"#EFF6FF": "#172554", "#EEF2FF": "#1E1B4B", "#FFFBEB": "#422006", "#F5F3FF": "#2E1065", "#FFFFFF": "#172554"}.get(bg, "#172554")
+            border = "#0F172A"
         else:
-            border = "#E2E8F0"
+            border = "#0F172A"
         self._base_style = (
-            f"QFrame#LectureCard {{ background: {bg}; border: 1px solid {border}; "
-            f"border-left: 4px solid {accent}; border-radius: 8px; padding: 6px; }} "
-            f"QFrame#LectureCard:hover {{ border: 1px solid {accent}; border-left: 4px solid {accent}; }}"
+            f"QFrame#LectureCard {{ background: {bg}; border: 2px solid {border}; "
+            f"border-left: 6px solid {accent}; border-radius: 2px; padding: 6px; }} "
+            f"QFrame#LectureCard:hover {{ border: 2px solid {accent}; border-left: 6px solid {accent}; }}"
         )
         self.setStyleSheet(self._base_style)
         if hasattr(self, "subject_label"):
