@@ -138,12 +138,18 @@ class TimetableView(QWidget):
         session = get_session()
         try:
             sems = session.query(Semester).order_by(Semester.id).all()
+            self.sem_combo.blockSignals(True)
             self.sem_combo.clear()
             for s in sems:
                 self.sem_combo.addItem(s.name, s.id)
             if sems:
                 self.current_semester_id = sems[0].id
+            self.sem_combo.blockSignals(False)
         finally:
+            try:
+                self.sem_combo.blockSignals(False)
+            except Exception:
+                pass
             session.close()
 
     def refresh(self):
