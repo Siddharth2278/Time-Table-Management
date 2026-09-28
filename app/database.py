@@ -123,6 +123,16 @@ def init_db(db_path: Path | None = None, echo: bool = False):
             if session.query(Setting).filter(Setting.key == _k).first() is None:
                 session.add(Setting(key=_k, value=_v))
                 session.flush()
+        # One-time migration: old installs defaulted to dark; move to archival light
+        try:
+            _migrated = session.query(Setting).filter(Setting.key == "theme_migrated_to_light").first()
+            _theme = session.query(Setting).filter(Setting.key == "theme").first()
+            if _migrated is None and _theme is not None and (_theme.value or "").strip().lower() == "dark":
+                _theme.value = "light"
+                session.add(Setting(key="theme_migrated_to_light", value="1"))
+                session.flush()
+        except Exception:
+            pass
         # Short demo data for one department — simple but effective
         from app.models import Teacher as _Teacher
         if session.query(_Teacher).count() == 0:
