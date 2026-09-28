@@ -26,7 +26,7 @@ class DropZone(QFrame):
         if event.mimeData().hasFormat("application/x-timetable-entry"):
             event.acceptProposedAction()
             self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #4F46E5; border-radius: 8px; background: #EEF2FF; }"
+                "QFrame#DropZone { border: 2px solid #1C355E; border-radius: 2px; background: #DBEAFE; }"
             )
         else:
             event.ignore()
@@ -286,7 +286,7 @@ class TimetableGridWidget(QFrame):
         self.selected_entry_id = entry_id
         for card in self.cards.values():
             if card.entry_id == entry_id:
-                card.setStyleSheet(card._base_style + " QFrame#LectureCard { border: 2px solid #4F46E5; }")
+                card.setStyleSheet(card._base_style + " QFrame#LectureCard { border: 2px solid #1C355E; }")
             else:
                 card.setStyleSheet(card._base_style)
 
