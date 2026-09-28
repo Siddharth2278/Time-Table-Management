@@ -1,27 +1,40 @@
-"""Modern premium theme for College Timetable Manager.
+"""Institutional theme for College Timetable Manager.
 
-Design goals:
-- No CSS variables (Qt QSS does not support var()) — every color is explicit.
-- Sidebar is ALWAYS dark navy so white text is always readable.
-- Content area: clean light theme by default, polished dark theme optional.
-- High-contrast body text: dark slate on light, soft white on dark. Never white-on-white.
+Swiss-design institutional: stark white canvas, sharp 2px borders,
+Inter for UI/data, Roboto Slab for headers. Explicit colors only
+(Qt QSS has no var()).
 """
 
-FONT_PRIMARY = "'Segoe UI', 'Inter', system-ui, sans-serif"
+FONT_UI = "'Inter', 'Segoe UI', system-ui, sans-serif"
+FONT_HEAD = "'Roboto Slab', 'Inter', serif"
 
-# Shared accent
-INDIGO = "#4F46E5"
-INDIGO_HOVER = "#4338CA"
-INDIGO_SOFT = "#EEF2FF"
-SIDEBAR_BG = "#0C1326"
-SIDEBAR_BG2 = "#111C34"
+# Institutional palette
+NAVY = "#0F172A"
+NAVY2 = "#1E293B"
+CRIMSON = "#DC2626"
+CRIMSON_DARK = "#991B1B"
+EMERALD = "#059669"
+EMERALD_DARK = "#065F46"
+PAPER = "#FFFFFF"
+CANVAS = "#F8FAFC"
+GRID_LINE = "#CBD5E1"
+
+# Shared accent (kept for checked nav)
+INDIGO = "#1E40AF"
+INDIGO_HOVER = "#1E3A8A"
+INDIGO_SOFT = "#DBEAFE"
+SIDEBAR_BG = "#0F172A"
+SIDEBAR_BG2 = "#1E293B"
 
 
 def _common() -> str:
     return f"""
     * {{
-        font-family: {FONT_PRIMARY};
+        font-family: {FONT_UI};
         font-size: 13px;
+    }}
+    QLabel#PageTitle, QLabel#HeaderTitle {{
+        font-family: {FONT_HEAD};
     }}
     QToolTip {{
         background-color: #111827;
@@ -87,11 +100,13 @@ def _common() -> str:
         letter-spacing: 0.7px;
     }}
     QFrame#ContentCard {{
-        border-radius: 12px;
+        border: 2px solid {GRID_LINE};
+        border-radius: 2px;
         padding: 14px;
     }}
     QFrame#StatCard {{
-        border-radius: 12px;
+        border: 2px solid {GRID_LINE};
+        border-radius: 2px;
         padding: 12px;
     }}
     """
