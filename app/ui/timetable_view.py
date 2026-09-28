@@ -413,11 +413,14 @@ class TimetableView(QWidget):
 
     def export(self, kind: str):
         if not self.current_semester_id:
+            QMessageBox.warning(self, "No Semester", "Please select a semester first.")
             return
         session = get_session()
         try:
             sem = session.query(Semester).filter(Semester.id==self.current_semester_id).first()
-            name = sem.name if sem else "Timetable"
+            raw = sem.name if sem else "Timetable"
+            import re
+            name = re.sub(r'[<>:/\\|?*]', '-', raw).strip() or "Timetable"
         finally:
             session.close()
         if kind == "csv":
