@@ -28,13 +28,15 @@ def get_engine(db_path: Path | None = None, echo: bool = False):
     # Ensure parent exists
     db_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"sqlite:///{db_path}"
-    engine = create_engine(url, echo=echo, connect_args={"check_same_thread": False})
-    # Enable foreign keys
+    engine = create_engine(url, echo=echo, connect_args={"check_same_thread": False, "timeout": 30})
+    # Enable foreign keys + WAL + busy timeout
     from sqlalchemy import event
     @event.listens_for(engine, "connect")
     def _fk_pragma(dbapi_conn, _):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
     return engine
 
@@ -43,8 +45,14 @@ _SessionLocal = None
 
 def init_engine(db_path: Path | None = None, echo: bool = False):
     global _engine, _SessionLocal
+    old = _engine
     _engine = get_engine(db_path, echo)
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    if old is not None:
+        try:
+            old.dispose()
+        except Exception:
+            pass
     return _engine
 
 def get_engine_instance():
@@ -105,18 +113,24 @@ def init_db(db_path: Path | None = None, echo: bool = False):
                 "default_end_time": "17:00",
                 "backup_location": str(get_data_dir() / "backups"),
                 "theme": "dark",
+                "wef_date": "",
             }
             for k, v in defaults.items():
                 session.add(Setting(key=k, value=v))
             session.flush()
-        # Ensure theme exists for existing DBs (when settings already existed)
-        if session.query(Setting).filter(Setting.key=="theme").first() is None:
-            session.add(Setting(key="theme", value="dark"))
-            session.flush()
+        # Ensure expected keys exist for existing DBs
+        for _k, _v in (("theme", "dark"), ("wef_date", "")):
+            if session.query(Setting).filter(Setting.key == _k).first() is None:
+                session.add(Setting(key=_k, value=_v))
+                session.flush()
         # Short demo data for one department — simple but effective
         from app.models import Teacher as _Teacher
         if session.query(_Teacher).count() == 0:
-            _seed_short_data(session)
+            try:
+                _seed_short_data(session)
+            except Exception:
+                # Concurrent seeder won the race (unique violation) — rollback partial, continue
+                session.rollback()
         session.commit()
     except Exception:
         session.rollback()
@@ -336,12 +350,13 @@ def clear_all_department_data(session=None):
         close_after = True
     try:
         # Order matters due to FKs
-        session.query(TimetableEntry).delete()
-        session.query(TeacherAvailability).delete()
-        session.query(RoomAvailability).delete()
-        session.query(Subject).delete()
-        session.query(Teacher).delete()
-        session.query(Room).delete()
+        session.query(TimetableEntry).delete(synchronize_session=False)
+        session.query(TeacherAvailability).delete(synchronize_session=False)
+        session.query(RoomAvailability).delete(synchronize_session=False)
+        session.query(Subject).delete(synchronize_session=False)
+        session.query(Teacher).delete(synchronize_session=False)
+        session.query(Room).delete(synchronize_session=False)
+        session.expire_all()
         session.commit()
     except Exception:
         session.rollback()
@@ -352,13 +367,18 @@ def clear_all_department_data(session=None):
 
 def load_sample_data_if_empty(session=None):
     """Public helper for UI button — loads sample data only if DB is empty."""
-    from app.models import Teacher
+    from app.models import Teacher, Subject, TimetableEntry
     close_after = False
     if session is None:
         session = get_session()
         close_after = True
     try:
-        if session.query(Teacher).count() == 0:
+        is_empty = (
+            session.query(Teacher).count() == 0
+            and session.query(Subject).count() == 0
+            and session.query(TimetableEntry).count() == 0
+        )
+        if is_empty:
             _seed_sample_data(session)
             session.commit()
             return True
