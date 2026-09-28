@@ -323,11 +323,18 @@ class TimetableView(QWidget):
             if not entry:
                 QMessageBox.warning(self, "Not Found", "Entry not found.")
                 return
-            # Need to keep session open for dialog? Dialog creates its own session, so close this
+            # Detached-safe copy: dialog reads scalars after session close
+            try:
+                data_entry = type("DetachedEntry", (), {})()
+                for _f in ("id", "semester_id", "subject_id", "teacher_id", "room_id", "day_id", "start_time", "end_time", "lecture_type", "academic_year"):
+                    setattr(data_entry, _f, getattr(entry, _f))
+            except Exception:
+                QMessageBox.critical(self, "Error", "Could not load lecture (corrupt row).")
+                return
             session.expunge(entry)
         finally:
             session.close()
-        dlg = LectureDialog(self, entry=entry)
+        dlg = LectureDialog(self, entry=data_entry)
         if dlg.exec():
             data = dlg.get_data()
             session = get_session()
