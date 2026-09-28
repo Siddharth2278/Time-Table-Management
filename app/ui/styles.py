@@ -9,9 +9,9 @@ FONT_UI = "'Inter', 'Segoe UI', system-ui, sans-serif"
 FONT_HEAD = "'Playfair Display', Georgia, serif"
 FONT_MONO = "'JetBrains Mono', ui-monospace, monospace"
 
-# Institutional palette
-NAVY = "#0F172A"
-NAVY2 = "#1E293B"
+# Institutional palette — 1:1 with web archival SaaS
+NAVY = "#1C355E"
+NAVY2 = "#16294A"
 CRIMSON = "#DC2626"
 CRIMSON_DARK = "#991B1B"
 EMERALD = "#059669"
@@ -21,11 +21,11 @@ CANVAS = "#F8FAFC"
 GRID_LINE = "#CBD5E1"
 
 # Shared accent (kept for checked nav)
-INDIGO = "#1E40AF"
-INDIGO_HOVER = "#1E3A8A"
+INDIGO = "#1C355E"
+INDIGO_HOVER = "#16294A"
 INDIGO_SOFT = "#DBEAFE"
-SIDEBAR_BG = "#0F172A"
-SIDEBAR_BG2 = "#1E293B"
+SIDEBAR_BG = "#1C355E"
+SIDEBAR_BG2 = "#16294A"
 
 
 def _common() -> str:
