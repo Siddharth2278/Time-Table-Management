@@ -232,6 +232,13 @@ class TimetableView(QWidget):
         try:
             # Working days enabled
             days = session.query(WorkingDay).filter(WorkingDay.is_enabled==True).order_by(WorkingDay.sort_order).all()
+            if not days:
+                self.completion_label.setText("No working days enabled — enable Mon-Sat in Time Slots.")
+                self._times = []
+                self._days = []
+                self.grid.populate([], [], [])
+                QMessageBox.warning(self, "No Working Days", "All working days are disabled. Enable at least one day in Time Slots.")
+                return
             # Time slots for grid - use distinct time ranges from TimeSlot or default
             slots = session.query(TimeSlot).filter(TimeSlot.is_break==False, TimeSlot.is_enabled==True).order_by(TimeSlot.start_time).all()
             if not slots:
