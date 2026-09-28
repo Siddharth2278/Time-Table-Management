@@ -117,6 +117,8 @@ def import_json(session, filepath: Path):
         for model in [TimetableEntry, TeacherAvailability, RoomAvailability, Subject, Teacher, Room, TimeSlot, WorkingDay, Semester, Setting]:
             session.query(model).delete(synchronize_session=False)
         session.flush()
+        session.expire_all()
+        session.expunge_all()
         # Insert in dependency order
         def _coerce(model, item):
             item = dict(item)
