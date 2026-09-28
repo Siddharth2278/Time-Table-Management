@@ -129,12 +129,12 @@ class TimetableService:
 
     @staticmethod
     def get_semester_timetable(session: Session, semester_id: int) -> List[TimetableEntry]:
-        return session.query(TimetableEntry).filter(TimetableEntry.semester_id == semester_id).order_by(TimetableEntry.day_id, TimetableEntry.start_time).all()
+        return session.query(TimetableEntry).join(WorkingDay, TimetableEntry.day_id == WorkingDay.id).filter(TimetableEntry.semester_id == semester_id).order_by(WorkingDay.sort_order, TimetableEntry.start_time).all()
 
     @staticmethod
     def get_teacher_timetable(session: Session, teacher_id: int) -> List[TimetableEntry]:
-        return session.query(TimetableEntry).filter(TimetableEntry.teacher_id == teacher_id).order_by(TimetableEntry.day_id, TimetableEntry.start_time).all()
+        return session.query(TimetableEntry).join(WorkingDay, TimetableEntry.day_id == WorkingDay.id).filter(TimetableEntry.teacher_id == teacher_id).order_by(WorkingDay.sort_order, TimetableEntry.start_time).all()
 
     @staticmethod
     def get_room_timetable(session: Session, room_id: int) -> List[TimetableEntry]:
-        return session.query(TimetableEntry).filter(TimetableEntry.room_id == room_id).order_by(TimetableEntry.day_id, TimetableEntry.start_time).all()
+        return session.query(TimetableEntry).join(WorkingDay, TimetableEntry.day_id == WorkingDay.id).filter(TimetableEntry.room_id == room_id).order_by(WorkingDay.sort_order, TimetableEntry.start_time).all()
