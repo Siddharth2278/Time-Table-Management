@@ -319,6 +319,22 @@ class MainWindow(QMainWindow):
     def on_navigate(self, key):
         idx = self.key_to_index.get(key)
         if idx is not None:
+            # Belt and suspenders: exactly one page visible, no ghost compositing
+            for k, i in self.key_to_index.items():
+                w = self.stack.widget(i)
+                try:
+                    if i == idx:
+                        w.show()
+                    else:
+                        w.hide()
+                        v = self.views.get(k)
+                        if v is not None:
+                            try:
+                                v.setGraphicsEffect(None)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
             self.stack.setCurrentIndex(idx)
             view = self.views.get(key)
             if view and hasattr(view, "refresh"):
