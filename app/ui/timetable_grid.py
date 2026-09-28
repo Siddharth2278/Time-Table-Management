@@ -234,15 +234,15 @@ class TimetableGridWidget(QFrame):
         for column, label in enumerate(headers):
             header = QLabel(label)
             header.setAlignment(Qt.AlignCenter)
-            header.setStyleSheet("color: #FFFFFF; background: #0F172A; border: 1px solid #0F172A; border-radius: 2px; padding: 10px 5px; font-size: 11px; font-weight: 800;")
+            header.setStyleSheet("color: #57534E; background: #F3F1EA; border: 1px solid #DEDCD3; border-radius: 2px; padding: 10px 5px; font-size: 11px; font-weight: 700;")
             self.grid.addWidget(header, 0, column)
         for row, (start, end) in enumerate(times, start=1):
             label = QLabel(f"{start}\n{end}")
             label.setAlignment(Qt.AlignCenter)
             if self.dark_mode:
-                label.setStyleSheet("color: #E2E8F0; background: #1E293B; border: 1px solid #0F172A; border-radius: 2px; padding: 8px 4px; font-size: 11px; font-weight: 700;")
+                label.setStyleSheet("color: #E2E8F0; background: #1E293B; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; font-size: 11px; font-weight: 700;")
             else:
-                label.setStyleSheet("color: #0F172A; background: #F8FAFC; border: 1px solid #0F172A; border-radius: 2px; padding: 8px 4px; font-size: 11px; font-weight: 700;")
+                label.setStyleSheet("color: #111110; background: #F3F1EA; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;")
             self.grid.addWidget(label, row, 0)
             for column, _day in enumerate(days, start=1):
                 zone = DropZone(row - 1, column - 1, self)
