@@ -238,21 +238,21 @@ def _light_qss() -> str:
     }}
     QFrame#Card {{
         background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 14px;
+        border: 2px solid #0F172A;
+        border-radius: 2px;
         padding: 14px;
     }}
-    /* Buttons */
+    /* Buttons — sharp institutional */
     QPushButton {{
-        min-height: 34px;
-        border-radius: 8px;
+        min-height: 44px;
+        border-radius: 2px;
         padding: 7px 14px;
         font-weight: 600;
         font-size: 13px;
     }}
     QPushButton#PrimaryButton {{
         background-color: {INDIGO};
-        border: 1px solid {INDIGO_HOVER};
+        border: 2px solid {INDIGO_HOVER};
         color: #FFFFFF;
     }}
     QPushButton#PrimaryButton:hover {{ background-color: {INDIGO_HOVER}; }}
@@ -268,27 +268,27 @@ def _light_qss() -> str:
         color: {INDIGO_HOVER};
     }}
     QPushButton#DangerButton {{
-        background-color: #DC2626;
-        border: 1px solid #B91C1C;
+        background-color: {CRIMSON};
+        border: 2px solid {CRIMSON_DARK};
         color: #FFFFFF;
     }}
-    QPushButton#DangerButton:hover {{ background-color: #B91C1C; }}
-    /* Tables */
+    QPushButton#DangerButton:hover {{ background-color: {CRIMSON_DARK}; }}
+    /* Tables — precise borders, mobile touch rows */
     QTableWidget {{
         background-color: #FFFFFF;
         alternate-background-color: #F8FAFC;
-        gridline-color: #E2E8F0;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        selection-background-color: #E0E7FF;
-        selection-color: #1E1B4B;
+        gridline-color: {GRID_LINE};
+        border: 2px solid #0F172A;
+        border-radius: 2px;
+        selection-background-color: #DBEAFE;
+        selection-color: #0F172A;
         color: #0F172A;
         font-size: 13px;
     }}
     QTableWidget::item {{
-        padding: 9px 8px;
+        padding: 12px 8px;
         color: #0F172A;
-        border-bottom: 1px solid #F1F5F9;
+        border-bottom: 1px solid {GRID_LINE};
     }}
     QTableWidget::item:selected {{
         background-color: #E0E7FF;
