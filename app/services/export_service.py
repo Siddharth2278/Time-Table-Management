@@ -124,18 +124,22 @@ def export_pdf(session: Session, semester_id: int, filepath: Path):
     dept = _get_setting(session, "department", "Computer Engineering")
     year = _get_setting(session, "academic_year", "2026-27")
 
-    # Abbreviations
+    # Abbreviations (skip titles, consistent 2-3 letters)
+    _TITLES = {"prof", "dr", "mr", "mrs", "ms", "miss", "shri", "smt"}
+
     def _abbr(name: str) -> str:
         if not name:
             return ""
-        parts = name.replace(".", " ").split()
+        parts = [p for p in name.replace(".", " ").split() if p.lower() not in _TITLES]
+        if not parts:
+            parts = name.replace(".", " ").split()
         if len(parts) == 1:
             return parts[0][:3].upper()
         return "".join(p[0] for p in parts[:3]).upper()
 
     # College header in all caps like sample
-    college_up = college.upper()
-    dept_up = dept.upper()
+    college_up = (college or "College").upper()
+    dept_up = (dept or "Department").upper()
 
     doc = SimpleDocTemplate(str(filepath), pagesize=landscape(A4), leftMargin=10*mm, rightMargin=10*mm, topMargin=8*mm, bottomMargin=8*mm, title=f"{semester.name if semester else 'Timetable'} - {year}")
     styles = getSampleStyleSheet()
@@ -148,20 +152,12 @@ def export_pdf(session: Session, semester_id: int, filepath: Path):
     sub_style = ParagraphStyle('GovSub', parent=styles['Normal'], fontSize=8, alignment=TA_CENTER, textColor=HexColor(0x334155), fontName='Helvetica', leading=10, spaceAfter=1*mm)
     small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=7, alignment=TA_CENTER, textColor=HexColor(0x64748B), leading=8)
 
-    # Effective date — like sample 24/8/2026
-    wef = datetime.now().strftime("%d/%m/%Y")
-    # Try to get from settings if exists
-    wef_setting = _get_setting(session, "wef_date", wef)
-    if wef_setting:
-        wef = wef_setting
+    # Effective date — seeded setting wins, else blank (no fake today)
+    wef_setting = _get_setting(session, "wef_date", "")
+    wef = wef_setting.strip() if isinstance(wef_setting, str) else ""
 
-    # Class label — map semester to year like THIRD YEAR COMPUTER (CO 5K)
-    # Keep simple: use semester name
+    # Class label — generic, no hardcoded branch
     class_label = f"CLASS: {semester.name.upper() if semester else 'SEMESTER'}"
-    # Try to map to friendly — Sem 5 -> THIRD YEAR
-    mapping = {"Semester 1": "FIRST YEAR", "Semester 2": "FIRST YEAR", "Semester 3": "SECOND YEAR", "Semester 4": "SECOND YEAR", "Semester 5": "THIRD YEAR", "Semester 6": "THIRD YEAR"}
-    if semester and semester.name in mapping:
-        class_label = f"CLASS: {mapping[semester.name]} COMPUTER ({semester.name.replace('Semester ', 'CO ')}K)"
 
     story.append(Paragraph(college_up, ParagraphStyle('t1', parent=title_style, fontSize=14)))
     story.append(Paragraph(f"DEPARTMENT OF {dept_up}", dept_style))
@@ -185,11 +181,15 @@ def export_pdf(session: Session, semester_id: int, filepath: Path):
     # Also add defined slots for structure even if no entry
     for s in session.query(TimeSlot).filter(TimeSlot.is_enabled==True).order_by(TimeSlot.start_time).all():
         time_set.add((s.start_time, s.end_time))
-    # Sort
-    def _to_min(t): 
-        h,m = map(int, t.split(":"))
-        return h*60+m
+    # Sort (skip corrupt times instead of crashing export)
+    def _to_min(t):
+        try:
+            h, m = map(int, str(t).split(":"))
+            return h * 60 + m
+        except (ValueError, AttributeError, TypeError):
+            return 10 ** 9
     time_list = sorted(time_set, key=lambda x: _to_min(x[0]))
+    time_list = [x for x in time_list if _to_min(x[0]) < 10 ** 9]
     # If still empty, default
     if not time_list:
         time_list = [("10:15","11:15"),("11:15","12:15"),("12:15","13:15"),("13:15","13:45"),("13:45","14:45"),("14:45","15:45"),("15:45","16:45")]
@@ -273,14 +273,18 @@ def export_pdf(session: Session, semester_id: int, filepath: Path):
     story.append(tbl)
     story.append(Spacer(1, 4*mm))
 
-    # Footer: Subject Teacher with Abbreviation + Load + Signatures — like sample
-    # Collect unique subjects in this semester
+    # Footer: Subject Teacher with Abbreviation + Load + Signatures
+    # Collect unique subjects in this semester (use actual scheduled teacher)
     from app.models import Subject
     subjects = session.query(Subject).filter(Subject.semester_id==semester_id).order_by(Subject.code).all()
+    teacher_by_subject: dict[int, str] = {}
+    for e in entries:
+        if e.subject_id is not None and e.subject_id not in teacher_by_subject:
+            teacher_by_subject[e.subject_id] = e.teacher.name if e.teacher else ""
     # Build abbreviation map
     subj_rows = []
     for s in subjects:
-        t_name = s.assigned_teacher.name if s.assigned_teacher else "-"
+        t_name = teacher_by_subject.get(s.id) or (s.assigned_teacher.name if s.assigned_teacher else "-")
         t_abbr = _abbr(t_name) if t_name != "-" else "-"
         subj_rows.append([f"{s.code} - {s.name}", f"{t_name} ({t_abbr})", s.subject_type])
     # If no subjects, add placeholder
@@ -307,15 +311,19 @@ def export_pdf(session: Session, semester_id: int, filepath: Path):
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, HexColor(0xF1F5F9)]),
     ]))
 
-    # Right side: Practical Load / Theory Load + signatures
+    # Right side: Practical Load / Theory Load + signatures (settings-driven, generic fallback)
     # Count practical vs theory
-    prac = sum(1 for s in subjects if s.subject_type in ("Lab", "Practical"))
+    prac = sum(1 for s in subjects if str(s.subject_type).lower() in ("lab", "practical"))
     theory = len(subjects) - prac
+    sig1 = _get_setting(session, "sign_coordinator", "Time Table Co-ordinator")
+    sig2 = _get_setting(session, "sign_hod", "Head of Department")
+    sig3 = _get_setting(session, "sign_academic", "Academic Coordinator")
+    sig4 = _get_setting(session, "sign_principal", "Principal")
     right_data = [
         [Paragraph(f"<b>Practical Load:</b> {prac*2} hrs", small_style), Paragraph(f"<b>Theory Load:</b> {theory*4} hrs", small_style)],
         [Spacer(1, 6*mm), Spacer(1, 6*mm)],
-        [Paragraph("Mrs. Asha S Patil<br/><font size=6>Time Table Co-ordinator</font>", ParagraphStyle('sig', parent=small_style, alignment=TA_CENTER, leading=7)), Paragraph("G. P. Awasari<br/><font size=6>Head of Department</font>", ParagraphStyle('sig2', parent=small_style, alignment=TA_CENTER, leading=7))],
-        [Paragraph("Dr. V B Jawade<br/><font size=6>Academic Coordinator</font>", ParagraphStyle('sig', parent=small_style, alignment=TA_CENTER, leading=7)), Paragraph("Dr. Vitthal S Bandal<br/><font size=6>Principal</font>", ParagraphStyle('sig2', parent=small_style, alignment=TA_CENTER, leading=7))],
+        [Paragraph(f"<br/><font size=6>{sig1}</font>", ParagraphStyle('sig', parent=small_style, alignment=TA_CENTER, leading=7)), Paragraph(f"<br/><font size=6>{sig2}</font>", ParagraphStyle('sig2', parent=small_style, alignment=TA_CENTER, leading=7))],
+        [Paragraph(f"<br/><font size=6>{sig3}</font>", ParagraphStyle('sig', parent=small_style, alignment=TA_CENTER, leading=7)), Paragraph(f"<br/><font size=6>{sig4}</font>", ParagraphStyle('sig2', parent=small_style, alignment=TA_CENTER, leading=7))],
     ]
     right_tbl = Table(right_data, colWidths=[35*mm, 35*mm])
     right_tbl.setStyle(TableStyle([
