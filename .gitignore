@@ -18,3 +18,4 @@ venv/
 *.bak
 Thumbs.db
 Desktop.ini
+*.tsbuildinfo
