@@ -281,7 +281,9 @@ class TimetableView(QWidget):
             data = dlg.get_data()
             session = get_session()
             try:
-                ok, result = TimetableService.create_entry(session, **data, academic_year="2026-27")
+                acad = session.query(Setting).filter(Setting.key == "academic_year").first()
+                year = acad.value if acad and acad.value else "2026-27"
+                ok, result = TimetableService.create_entry(session, **data, academic_year=year)
                 if ok:
                     self.clear_conflict_notice()
                     QMessageBox.information(self, "Success", "Lecture added successfully.")
