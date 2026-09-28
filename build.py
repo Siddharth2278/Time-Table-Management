@@ -39,8 +39,8 @@ def main():
     run(f"{sys.executable} -m pip install -r requirements.txt --quiet")
 
     # 3. Run tests
-    print("\n--- Running conflict engine tests ---")
-    run(f"{sys.executable} -m pytest tests/test_conflict_engine.py -v")
+    print("\n--- Running tests ---")
+    run(f"{sys.executable} -m pytest tests/ -v")
 
     # 4. Build with PyInstaller
     print("\n--- Building executable with PyInstaller ---")
