@@ -6,20 +6,37 @@ from app.services.conflict_service import ConflictService
 
 
 class StatCard(QFrame):
-    """Compact metric card designed for quick scanning."""
+    """Web-style metric card: muted icon square plus mono value. Flow unchanged."""
 
-    def __init__(self, title, value, gradient=None):
+    ICON_BG = ("#E0E7FF", "#D1FAE5", "#FEF3C7", "#FCE7F3", "#DBEAFE", "#F3F1EA")
+    ICON_FG = ("#1C355E", "#065F46", "#92400E", "#9A2C2C", "#1C355E", "#57534E")
+    ICON_TXT = ("T", "S", "C", "L", "S", "U")
+
+    def __init__(self, title, value, gradient=None, icon_index: int = 0):
         super().__init__()
         self.setObjectName("StatCard")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(4)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(16, 14, 16, 14)
+        outer.setSpacing(12)
+        icon = QLabel(self.ICON_TXT[icon_index % len(self.ICON_TXT)])
+        icon.setFixedSize(48, 48)
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setStyleSheet(
+            f"background: {self.ICON_BG[icon_index % len(self.ICON_BG)]};"
+            f"color: {self.ICON_FG[icon_index % len(self.ICON_FG)]};"
+            "font-size: 18px; font-weight: 700; border: none; border-radius: 2px;"
+        )
+        outer.addWidget(icon)
+        col = QVBoxLayout()
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(2)
         self.val_label = QLabel("0")
         self.val_label.setObjectName("StatValue")
-        layout.addWidget(self.val_label)
+        col.addWidget(self.val_label)
         title_label = QLabel(title)
         title_label.setObjectName("StatLabel")
-        layout.addWidget(title_label)
+        col.addWidget(title_label)
+        outer.addLayout(col, 1)
         self.setMinimumHeight(92)
         self.setMinimumWidth(150)
         self._target = value
@@ -150,7 +167,7 @@ class DashboardView(QWidget):
             ]
             made = []
             for idx, (title, val) in enumerate(cards):
-                card = StatCard(title, val, CARD_GRADIENTS[idx % len(CARD_GRADIENTS)])
+                card = StatCard(title, val, CARD_GRADIENTS[idx % len(CARD_GRADIENTS)], icon_index=idx)
                 self.stats_layout.addWidget(card, idx // 3, idx % 3)
                 made.append(card)
             from app.ui.animations import stagger_in
