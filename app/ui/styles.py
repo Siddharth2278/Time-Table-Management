@@ -296,22 +296,22 @@ def _light_qss() -> str:
         border-bottom: 1px solid {GRID_LINE};
     }}
     QTableWidget::item:selected {{
-        background-color: #E0E7FF;
-        color: #1E1B4B;
+        background-color: #DBEAFE;
+        color: #1C355E;
         font-weight: 600;
     }}
     QHeaderView::section {{
-        background-color: #F1F5F9;
-        color: #475569;
+        background-color: #F3F1EA;
+        color: #57534E;
         padding: 10px 8px;
         border: none;
-        border-bottom: 2px solid #E2E8F0;
+        border-bottom: 2px solid #DEDCD3;
         font-weight: 700;
         font-size: 11px;
         letter-spacing: 0.6px;
     }}
     QTableCornerButton::section {{
-        background-color: #F1F5F9;
+        background-color: #F3F1EA;
         border: none;
     }}
     /* Inputs */
