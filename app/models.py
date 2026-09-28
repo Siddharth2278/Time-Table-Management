@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, UniqueConstraint
+from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -89,8 +89,15 @@ class TimetableEntry(Base):
     end_time = Column(String(5), nullable=False)
     lecture_type = Column(String(50), default="Theory")
     academic_year = Column(String(20), default="2026-27")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    __table_args__ = (
+        UniqueConstraint("semester_id", "day_id", "start_time", "end_time", "subject_id", name="uq_entry_exact"),
+        Index("ix_entry_teacher_day", "teacher_id", "day_id"),
+        Index("ix_entry_room_day", "room_id", "day_id"),
+        Index("ix_entry_sem_day", "semester_id", "day_id"),
+    )
 
     semester = relationship("Semester", back_populates="timetable_entries")
     subject = relationship("Subject", back_populates="timetable_entries")
