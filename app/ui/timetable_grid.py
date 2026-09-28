@@ -226,11 +226,13 @@ class TimetableGridWidget(QFrame):
     def _norm(t: str) -> str:
         return str(t or "").strip()
 
-    def populate(self, days, times, entries):
+    def populate(self, days, times, entries, breaks=None):
         self.clear_grid()
         self.days = days
         self.times = times
-        headers = ["TIME"] + [day.name.upper() for day in days]
+        breaks = breaks or {}
+        norm_breaks = {(self._norm(a), self._norm(b)): n for (a, b), n in breaks.items()}
+        headers = ["DAY ↓ TIME →"] + [day.name.upper() for day in days]
         for column, label in enumerate(headers):
             header = QLabel(label)
             header.setAlignment(Qt.AlignCenter)
@@ -244,7 +246,18 @@ class TimetableGridWidget(QFrame):
             else:
                 label.setStyleSheet("color: #111110; background: #F3F1EA; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;")
             self.grid.addWidget(label, row, 0)
+            is_break = (self._norm(start), self._norm(end)) in norm_breaks
             for column, _day in enumerate(days, start=1):
+                if is_break:
+                    bname = str(norm_breaks.get((self._norm(start), self._norm(end)), "Break")).upper()
+                    blabel = QLabel(bname)
+                    blabel.setAlignment(Qt.AlignCenter)
+                    blabel.setStyleSheet(
+                        "color: #78716C; background: #F5F5F4; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; "
+                        "font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px;"
+                    )
+                    self.grid.addWidget(blabel, row, column)
+                    continue
                 zone = DropZone(row - 1, column - 1, self)
                 zone.set_theme(self.dark_mode)
                 zone.clicked.connect(self.slot_clicked)

@@ -236,13 +236,14 @@ class TimetableView(QWidget):
                 self.completion_label.setText("No working days enabled — enable Mon-Sat in Time Slots.")
                 self._times = []
                 self._days = []
-                self.grid.populate([], [], [])
+                self.grid.populate([], [], [], breaks={})
                 QMessageBox.warning(self, "No Working Days", "All working days are disabled. Enable at least one day in Time Slots.")
                 return
-            # Time slots for grid - use distinct time ranges from TimeSlot or default
-            slots = session.query(TimeSlot).filter(TimeSlot.is_break==False, TimeSlot.is_enabled==True).order_by(TimeSlot.start_time).all()
+            # Time slots for grid: include breaks so lunch renders hashed like web
+            slots = session.query(TimeSlot).filter(TimeSlot.is_enabled==True).order_by(TimeSlot.start_time).all()
             if not slots:
                 slots = []
+            breaks = {(s.start_time.strip(), s.end_time.strip()): (s.break_name or "Break") for s in slots if s.is_break}
             # Build rows from slots plus any extra times from entries (to show custom times)
             entries = TimetableService.get_semester_timetable(session, self.current_semester_id)
             self.entries = entries
@@ -270,7 +271,7 @@ class TimetableView(QWidget):
             times = [t for t in times if _sort_key(t) < 10 ** 9][:24]
             self._times = times
             self._days = days
-            self.grid.populate(days, times, entries)
+            self.grid.populate(days, times, entries, breaks=breaks)
         finally:
             session.close()
 
