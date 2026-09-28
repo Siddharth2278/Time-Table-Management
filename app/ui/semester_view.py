@@ -4,26 +4,26 @@ from app.database import get_session
 from app.models import Semester, Subject, TimetableEntry
 from app.services.conflict_service import ConflictService
 
-SEM_ACCENTS = ["#4F46E5", "#0EA5E9", "#059669", "#D97706", "#7C3AED", "#DB2777"]
+SEM_ACCENTS = ["#1C355E", "#1C355E", "#059669", "#9A2C2C", "#1C355E", "#1C355E"]
 
 
 class SemesterCard(QFrame):
     clicked = Signal(int)
-    def __init__(self, semester, completion, accent="#4F46E5"):
+    def __init__(self, semester, completion, accent="#1C355E"):
         super().__init__()
         self.semester_id = semester.id
         self.setFrameShape(QFrame.StyledPanel)
         self.setStyleSheet(f"""
             QFrame {{
                 background: #FFFFFF;
-                border: 1px solid #E2E8F0;
-                border-top: 4px solid {accent};
-                border-radius: 14px;
+                border: 2px solid #DEDCD3;
+                border-top: 6px solid {accent};
+                border-radius: 2px;
             }}
             QFrame:hover {{
-                border: 1.5px solid {accent};
-                border-top: 4px solid {accent};
-                background: #F8FAFC;
+                border: 2px solid {accent};
+                border-top: 6px solid {accent};
+                background: #FAF9F6;
             }}
         """)
         self.setCursor(Qt.PointingHandCursor)
@@ -42,8 +42,8 @@ class SemesterCard(QFrame):
         bar.setValue(int(completion["completion_pct"]))
         bar.setFormat(f"{completion['completion_pct']}%")
         bar.setStyleSheet("""
-            QProgressBar { border: 1px solid #E2E8F0; border-radius: 8px; background: #F1F5F9; text-align: center; height: 14px; font-size: 10px; color: #1E293B; }
-            QProgressBar::chunk { background: #4F46E5; border-radius: 7px; }
+            QProgressBar { border: 1px solid #DEDCD3; border-radius: 2px; background: #F3F1EA; text-align: center; height: 14px; font-size: 10px; color: #111110; }
+            QProgressBar::chunk { background: #1C355E; border-radius: 1px; }
         """)
         layout.addWidget(bar)
         detail = QLabel(f"{completion['scheduled']}/{completion['required']} lectures  \u2022  Remaining: {completion['remaining']}")
@@ -95,11 +95,16 @@ class SemesterView(QWidget):
         self.grid.addStretch()
 
     def refresh(self):
-        # Clear
+        # Clear immediately so old cards never ghost over new ones
         while self.cards_layout.count():
             item = self.cards_layout.takeAt(0)
             w = item.widget()
             if w:
+                try:
+                    w.hide()
+                    w.setParent(None)
+                except Exception:
+                    pass
                 w.deleteLater()
         session = get_session()
         try:
