@@ -98,9 +98,45 @@ class DashboardView(QWidget):
             required_total = 0
             for s in sems:
                 subs = session.query(Subject).filter(Subject.semester_id == s.id).all()
-                required_total += sum(x.required_lectures_per_week for x in subs)
+                for x in subs:
+                    try:
+                        v = int(x.required_lectures_per_week) if x.required_lectures_per_week is not None else 0
+                        required_total += max(0, v)
+                    except (TypeError, ValueError):
+                        continue
             unscheduled = max(0, required_total - total_lectures)
             conflicts = ConflictService.detect_all_conflicts(session)
+            # Include availability/break violations so banner is not falsely green
+            try:
+                from app.models import TeacherAvailability, RoomAvailability, TimeSlot
+                from app.utils.helpers import time_to_minutes as _t2m
+                extra = 0
+                _entries = session.query(TimetableEntry).all()
+                _tas = session.query(TeacherAvailability).filter(TeacherAvailability.is_unavailable == True).all()
+                _ras = session.query(RoomAvailability).filter(RoomAvailability.is_unavailable == True).all()
+                _brks = session.query(TimeSlot).filter(TimeSlot.is_break == True, TimeSlot.is_enabled == True).all()
+                def _ov(a, b, c, d):
+                    try:
+                        return _t2m(a) < _t2m(d) and _t2m(b) > _t2m(c)
+                    except (ValueError, AttributeError, TypeError):
+                        return False
+                for e in _entries:
+                    for ta in _tas:
+                        if ta.teacher_id == e.teacher_id and ta.day_id == e.day_id and _ov(ta.start_time, ta.end_time, e.start_time, e.end_time):
+                            extra += 1
+                            break
+                    for ra in _ras:
+                        if ra.room_id == e.room_id and ra.day_id == e.day_id and _ov(ra.start_time, ra.end_time, e.start_time, e.end_time):
+                            extra += 1
+                            break
+                    for b in _brks:
+                        if _ov(b.start_time, b.end_time, e.start_time, e.end_time):
+                            extra += 1
+                            break
+                total_conflicts = len(conflicts) + extra
+            except Exception:
+                total_conflicts = len(conflicts)
+                extra = 0
             cards = [
                 ("Total Teachers", total_teachers),
                 ("Total Subjects", total_subjects),
@@ -140,19 +176,19 @@ class DashboardView(QWidget):
                 container.setStyleSheet("background: transparent; border: none;")
                 container.setLayout(row)
                 self.sem_layout.addWidget(container)
-            if conflicts:
+            if total_conflicts:
                 # Direct message: list first few conflicts inline.
-                first = conflicts[0].get("message", "") if conflicts else ""
-                extra = f" (+{len(conflicts) - 1} more)" if len(conflicts) > 1 else ""
+                first = conflicts[0].get("message", "") if conflicts else "Availability/break violation detected."
+                extra_txt = f" (+{total_conflicts - 1} more)" if total_conflicts > 1 else ""
                 self.health_label.setText(
-                    f"\u26a0 {len(conflicts)} scheduling conflict(s) detected. Fix them in Timetable \u2014 errors appear directly when you save.\n{first}{extra}"
+                    f"{total_conflicts} conflict(s) detected ({len(conflicts)} scheduling + {extra} availability/break). Fix them in Timetable \u2014 errors appear directly when you save.\n{first}{extra_txt}"
                 )
                 self.health_label.setStyleSheet(
                     "color: #991B1B; font-weight: 600; font-size: 12.5px; background: #FEF2F2; "
                     "border: 1px solid #FECACA; border-radius: 10px; padding: 12px;"
                 )
             else:
-                self.health_label.setText("\u2713 Schedule is clean. No teacher, semester or room overlaps detected.")
+                self.health_label.setText("Schedule is clean. No teacher, semester, room, availability or break overlaps detected.")
                 self.health_label.setStyleSheet(
                     "color: #065F46; font-weight: 600; font-size: 12.5px; background: #ECFDF5; "
                     "border: 1px solid #A7F3D0; border-radius: 10px; padding: 12px;"
