@@ -2,6 +2,8 @@ import re
 
 def time_to_minutes(t: str) -> int:
     """Convert HH:MM to minutes since midnight. Supports H:MM and HH:MM."""
+    if not isinstance(t, str):
+        raise ValueError(f"Invalid time format: {t!r} (expected HH:MM)")
     t = t.strip()
     m = re.match(r"^(\d{1,2}):(\d{2})$", t)
     if not m:
@@ -12,6 +14,8 @@ def time_to_minutes(t: str) -> int:
     return h * 60 + mins
 
 def minutes_to_time(mins: int) -> str:
+    if not isinstance(mins, int) or not (0 <= mins < 24 * 60):
+        raise ValueError(f"Invalid minutes value: {mins!r} (expected 0..1439)")
     h = mins // 60
     m = mins % 60
     return f"{h:02d}:{m:02d}"
@@ -28,7 +32,7 @@ def validate_time_range(start: str, end: str):
     try:
         s = time_to_minutes(start)
         e = time_to_minutes(end)
-    except ValueError as ve:
+    except (ValueError, AttributeError, TypeError) as ve:
         return False, str(ve)
     if e <= s:
         return False, "End time must be after start time."
