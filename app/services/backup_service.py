@@ -71,7 +71,9 @@ def restore_database(db_path: Path, backup_path: Path):
 def export_json(session, filepath: Path):
     import json
     from app.models import Semester, Teacher, Room, Subject, WorkingDay, TimeSlot, TimetableEntry, TeacherAvailability, RoomAvailability, Setting
-    data = {}
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    data = {"schema_version": 1}
     for model, name in [
         (Semester, "semesters"),
         (Teacher, "teachers"),
@@ -102,23 +104,32 @@ def export_json(session, filepath: Path):
 
 def import_json(session, filepath: Path):
     import json
+    from datetime import datetime as _dt
     from app.models import Semester, Teacher, Room, Subject, WorkingDay, TimeSlot, TimetableEntry, TeacherAvailability, RoomAvailability, Setting
-    from app.database import Base
+    from sqlalchemy import text as _text
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
     # Clear existing (except maybe keep structure) - we will delete and reinsert
-    # Disable FK checks temporarily
-    session.execute(sqlalchemy_text("PRAGMA foreign_keys=OFF"))
+    # Disable FK checks temporarily (same connection)
+    con = session.connection()
+    con.execute(_text("PRAGMA foreign_keys=OFF"))
     try:
         for model in [TimetableEntry, TeacherAvailability, RoomAvailability, Subject, Teacher, Room, TimeSlot, WorkingDay, Semester, Setting]:
-            session.query(model).delete()
+            session.query(model).delete(synchronize_session=False)
         session.flush()
         # Insert in dependency order
+        def _coerce(model, item):
+            item = dict(item)
+            for col in model.__table__.columns:
+                if str(col.type).startswith("DATETIME") and isinstance(item.get(col.name), str):
+                    try:
+                        item[col.name] = _dt.fromisoformat(item[col.name])
+                    except (ValueError, TypeError):
+                        item[col.name] = None
+            return item
         def insert(model, items):
             for item in items:
-                # Remove id to let autoincrement? But we want preserve ids - keep id
-                # Handle datetime fields
-                obj = model(**item)
+                obj = model(**_coerce(model, item))
                 session.add(obj)
             session.flush()
         mapping = {
@@ -136,12 +147,22 @@ def import_json(session, filepath: Path):
         for key, model in mapping.items():
             if key in data:
                 insert(model, data[key])
+        # Fix sqlite autoincrement after preserving ids
+        for _model, _table in [(Semester, "semesters"), (Teacher, "teachers"), (Room, "rooms"), (Subject, "subjects"), (TimetableEntry, "timetable_entries")]:
+            try:
+                _max = con.execute(_text(f"SELECT MAX(id) FROM {_table}")).scalar() or 0
+                con.execute(_text(f"UPDATE sqlite_sequence SET seq={int(_max)} WHERE name='{_table}'"))
+            except Exception:
+                pass
         session.commit()
     except Exception as e:
         session.rollback()
         raise e
     finally:
-        session.execute(sqlalchemy_text("PRAGMA foreign_keys=ON"))
+        try:
+            con.execute(_text("PRAGMA foreign_keys=ON"))
+        except Exception:
+            pass
 
 def sqlalchemy_text(s):
     from sqlalchemy import text
