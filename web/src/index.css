@@ -33,3 +33,5 @@ body {
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(120,120,120,.45); border-radius: 999px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(120,120,120,.65); }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
