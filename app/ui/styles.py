@@ -191,7 +191,7 @@ def _light_qss() -> str:
     /* Header */
     QWidget#Header {{
         background-color: #FFFFFF;
-        border-bottom: 2px solid #0F172A;
+        border-bottom: 1px solid #DEDCD3;
     }}
     QLabel#HeaderTitle {{
         font-family: {FONT_HEAD};
@@ -226,7 +226,7 @@ def _light_qss() -> str:
     }}
     QPushButton#IconButton:hover {{
         background: #E2E8F0;
-        color: #0F172A;
+        color: #111110;
     }}
     QLabel#PageTitle {{ color: #111110; background: transparent; font-family: {FONT_HEAD}; }}
     QLabel#PageSubtitle {{ color: #64748B; background: transparent; }}
@@ -243,7 +243,7 @@ def _light_qss() -> str:
     }}
     QFrame#Card {{
         background-color: #FFFFFF;
-        border: 2px solid #0F172A;
+        border: 1px solid #DEDCD3;
         border-radius: 2px;
         padding: 14px;
     }}
@@ -283,16 +283,16 @@ def _light_qss() -> str:
         background-color: #FFFFFF;
         alternate-background-color: #F8FAFC;
         gridline-color: {GRID_LINE};
-        border: 2px solid #0F172A;
+        border: 1px solid #DEDCD3;
         border-radius: 2px;
         selection-background-color: #DBEAFE;
-        selection-color: #0F172A;
-        color: #0F172A;
+        selection-color: #111110;
+        color: #111110;
         font-size: 13px;
     }}
     QTableWidget::item {{
         padding: 12px 8px;
-        color: #0F172A;
+        color: #111110;
         border-bottom: 1px solid {GRID_LINE};
     }}
     QTableWidget::item:selected {{
@@ -321,7 +321,7 @@ def _light_qss() -> str:
         border-radius: 8px;
         padding: 8px 12px;
         font-size: 13px;
-        color: #0F172A;
+        color: #111110;
         selection-background-color: {INDIGO};
         selection-color: #FFFFFF;
     }}
@@ -340,7 +340,7 @@ def _light_qss() -> str:
     }}
     QComboBox QAbstractItemView {{
         background-color: #FFFFFF;
-        color: #0F172A;
+        color: #111110;
         selection-background-color: {INDIGO_SOFT};
         selection-color: {INDIGO_HOVER};
         border: 1px solid #E2E8F0;
@@ -358,7 +358,7 @@ def _light_qss() -> str:
         padding-top: 22px;
         font-weight: 700;
         font-size: 13px;
-        color: #0F172A;
+        color: #111110;
     }}
     QGroupBox::title {{
         subcontrol-origin: margin;
@@ -417,7 +417,7 @@ def _light_qss() -> str:
         background-color: #FFFFFF;
     }}
     QMessageBox QLabel {{
-        color: #0F172A;
+        color: #111110;
         font-size: 13px;
     }}
     QMessageBox QPushButton {{
