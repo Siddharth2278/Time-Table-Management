@@ -4,25 +4,68 @@ from pathlib import Path
 from datetime import datetime
 
 def backup_database(db_path: Path, backup_path: Path):
+    from sqlalchemy import text as _text  # local to avoid circulars
     backup_path.parent.mkdir(parents=True, exist_ok=True)
+    if Path(db_path).resolve() == Path(backup_path).resolve():
+        raise ValueError("Backup destination must differ from live database.")
     # Use sqlite backup API for safety if DB is open
-    # Fallback to shutil copy
+    src = dst = None
     try:
-        # Try sqlite3 backup
-        src = sqlite3.connect(str(db_path))
-        dst = sqlite3.connect(str(backup_path))
+        src = sqlite3.connect(str(db_path), timeout=30)
+        dst = sqlite3.connect(str(backup_path), timeout=30)
         src.backup(dst)
-        dst.close()
-        src.close()
     except Exception:
+        # Fallback to file copy only if backup API failed and no partial dst
+        try:
+            if dst is not None:
+                dst.close()
+                dst = None
+        except Exception:
+            pass
+        try:
+            if src is not None:
+                src.close()
+                src = None
+        except Exception:
+            pass
         shutil.copy2(str(db_path), str(backup_path))
+    finally:
+        for c in (dst, src):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
 
 def restore_database(db_path: Path, backup_path: Path):
     if not backup_path.exists():
         raise FileNotFoundError(f"Backup file not found: {backup_path}")
-    # Ensure backup is valid sqlite (quick check)
-    # Overwrite current db
-    # Close connections before - caller should ensure no open sessions
+    # Validate backup is a real SQLite DB before overwriting live DB
+    con = None
+    try:
+        con = sqlite3.connect(str(backup_path), timeout=30)
+        cur = con.cursor()
+        cur.execute("PRAGMA integrity_check")
+        row = cur.fetchone()
+        if not row or row[0] != "ok":
+            raise ValueError(f"Backup failed integrity check: {row}")
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='semesters'")
+        if cur.fetchone() is None:
+            raise ValueError("Backup is not a CollegeTimetable database (missing semesters table).")
+    finally:
+        try:
+            if con is not None:
+                con.close()
+        except Exception:
+            pass
+    # Safety copy of current db
+    try:
+        if Path(db_path).exists():
+            bak = Path(str(db_path) + f".pre-restore-{datetime.now().strftime('%Y%m%d-%H%M%S')}.bak")
+            shutil.copy2(str(db_path), str(bak))
+    except Exception:
+        pass
+    # Overwrite current db — caller must ensure no open sessions / restart after
     shutil.copy2(str(backup_path), str(db_path))
 
 def export_json(session, filepath: Path):
