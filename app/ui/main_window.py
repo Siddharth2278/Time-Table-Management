@@ -34,16 +34,16 @@ SIDEBAR_ITEMS = [
     ("Settings", "Settings", "SYSTEM"),
 ]
 
-_ICONS = {
-    "Dashboard": "\u25a3",
-    "Timetable": "\u25a4",
-    "Teachers": "\u263a",
-    "Subjects": "\u25c6",
-    "Rooms": "\u25a7",
-    "Semesters": "\u25cb",
-    "TimeSlots": "\u25d4",
-    "Help": "?",
-    "Settings": "\u2699",
+_SHORT = {
+    "Dashboard": "D",
+    "Timetable": "T",
+    "Teachers": "Te",
+    "Subjects": "S",
+    "Rooms": "R",
+    "Semesters": "Se",
+    "TimeSlots": "Ti",
+    "Help": "H",
+    "Settings": "St",
 }
 
 
@@ -128,7 +128,7 @@ class Sidebar(QFrame):
                 sec.setObjectName("SidebarSection")
                 layout.addWidget(sec)
                 last_section = section
-            btn = QPushButton(f"{_ICONS.get(key, '•')}   {label}")
+            btn = QPushButton(f"{label}")
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked, k=key: self.select(k))
@@ -145,7 +145,7 @@ class Sidebar(QFrame):
             self.setMinimumWidth(72)
             self.brand_box.hide()
             for key, btn in self.buttons.items():
-                btn.setText(_ICONS.get(key, "•"))
+                btn.setText(_SHORT.get(key, "•"))
                 btn.setToolTip(self._labels.get(key, key))
             # hide section headers in compact mode
             for i in range(self.layout().count()):
