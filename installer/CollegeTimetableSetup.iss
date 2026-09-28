@@ -4,11 +4,11 @@
 #define MyAppName "College Timetable Manager"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "College Timetable"
-#define MyAppURL ""
+#define MyAppURL "https://github.com/Siddharth2278/Time-Table-Management"
 #define MyAppExeName "CollegeTimetable.exe"
 
 [Setup]
-AppId={{8C1F5E2A-3B4D-4A6E-9F8A-2B3C4D5E6F7A}
+AppId={8C1F5E2A-3B4D-4A6E-9F8A-2B3C4D5E6F7A}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -17,8 +17,8 @@ DefaultDirName={autopf}\CollegeTimetableManager
 DisableDirPage=no
 DefaultGroupName=College Timetable Manager
 AllowNoIcons=yes
-LicenseFile=
-OutputDir=..
+LicenseFile=..\LICENSE
+OutputDir=..\dist
 OutputBaseFilename=CollegeTimetableSetup
 Compression=lzma
 SolidCompression=yes
