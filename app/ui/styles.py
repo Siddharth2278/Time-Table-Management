@@ -117,33 +117,33 @@ def _common() -> str:
 
 
 def _sidebar_qss() -> str:
-    # Sidebar is identical in both themes: dark navy, always readable.
+    # 1:1 with web: indigo sidebar, white/75 items, white active, mono section headers.
     return f"""
     QWidget#Sidebar {{
         background-color: {SIDEBAR_BG};
-        border-right: 1px solid #1E2A44;
+        border-right: 1px solid {SIDEBAR_BG2};
     }}
     QLabel#SidebarBrand {{
         color: #FFFFFF;
-        font-size: 14.5px;
-        font-weight: 800;
+        font-size: 15px;
+        font-weight: 600;
         letter-spacing: -0.2px;
         padding: 0px;
         background: transparent;
         border: none;
     }}
     QLabel#SidebarSub {{
-        color: #7C8DB0;
+        color: rgba(255, 255, 255, 0.6);
         font-size: 11px;
-        font-weight: 600;
+        font-weight: 500;
         padding: 0px;
         background: transparent;
         border: none;
     }}
     QLabel#SidebarSection {{
-        color: #64748B;
-        font-size: 10.5px;
-        font-weight: 700;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 11px;
+        font-weight: 500;
         letter-spacing: 1px;
         padding: 10px 12px 4px 12px;
         background: transparent;
@@ -153,25 +153,25 @@ def _sidebar_qss() -> str:
         text-align: left;
         padding: 10px 12px;
         border: none;
-        border-radius: 10px;
-        color: #A9B7D0;
+        border-radius: 2px;
+        color: rgba(255, 255, 255, 0.75);
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 500;
         margin: 2px 8px;
-        min-height: 36px;
+        min-height: 40px;
         background: transparent;
     }}
     QWidget#Sidebar QPushButton:hover {{
-        background-color: #1A2540;
+        background-color: rgba(255, 255, 255, 0.1);
         color: #FFFFFF;
     }}
     QWidget#Sidebar QPushButton:checked {{
         background-color: #FFFFFF;
         color: #1C355E;
-        font-weight: 700;
+        font-weight: 600;
     }}
     QLabel#SidebarFoot {{
-        color: #5B6B8C;
+        color: rgba(255, 255, 255, 0.6);
         font-size: 10px;
         padding: 10px 12px;
         background: transparent;
