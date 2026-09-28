@@ -11,10 +11,10 @@ class ConflictView(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
         title = QLabel("Conflict Dashboard")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
+        title.setStyleSheet("font-size: 18px; font-weight: 800; color: #0F172A;")
         layout.addWidget(title)
         sub = QLabel("Detects teacher, semester, room/lab conflicts and availability violations. All overlaps use: existingStart < newEnd AND existingEnd > newStart")
-        sub.setStyleSheet("color: var(--text-muted); font-size: 11px;")
+        sub.setStyleSheet("color: #64748B; font-size: 11px;")
         sub.setWordWrap(True)
         layout.addWidget(sub)
 
@@ -23,9 +23,9 @@ class ConflictView(QWidget):
         self.scan_btn.setObjectName("PrimaryButton")
         self.scan_btn.clicked.connect(self.scan)
         btns.addWidget(self.scan_btn)
-        self.clear_btn = QPushButton("Clear (no action needed if zero)")
+        self.clear_btn = QPushButton("Clear Table")
         self.clear_btn.setObjectName("SecondaryButton")
-        self.clear_btn.clicked.connect(self.scan)
+        self.clear_btn.clicked.connect(self.clear_table)
         btns.addWidget(self.clear_btn)
         btns.addStretch()
         layout.addLayout(btns)
@@ -48,8 +48,13 @@ class ConflictView(QWidget):
 
         # Legend
         legend = QLabel("Types: Teacher • Semester • Room/Lab • Availability • Break • Subject Limit\nGreen = No conflicts  •  Red = Conflict found")
-        legend.setStyleSheet("color: var(--text-muted); font-size: 11px; background: var(--bg-primary-light); border: 1px solid var(--border-light); border-radius: 8px; padding: 8px;")
+        legend.setStyleSheet("color: #64748B; font-size: 11px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px;")
         layout.addWidget(legend)
+
+    def clear_table(self):
+        self.table.setRowCount(0)
+        self.summary.setText("")
+        self.summary.setStyleSheet("font-weight: 600; padding: 8px; border-radius: 8px;")
 
     def refresh(self):
         self.scan()
@@ -81,11 +86,11 @@ class ConflictView(QWidget):
 
             total = len(conflicts) + len(avail_conflicts)
             if total == 0:
-                self.summary.setText("✓ No conflicts detected. Timetable is clean.")
-                self.summary.setStyleSheet("background: var(--bg-success-light); color: var(--success); border: 1px solid var(--border-success); padding: 10px; border-radius: 8px; font-weight: 700;")
+                self.summary.setText("No conflicts detected. Timetable is clean.")
+                self.summary.setStyleSheet("background: #DCFCE7; color: #166534; border: 1px solid #86EFAC; padding: 10px; border-radius: 8px; font-weight: 700;")
             else:
-                self.summary.setText(f"⚠ {total} conflict(s) found: {len(conflicts)} scheduling + {len(avail_conflicts)} availability/break")
-                self.summary.setStyleSheet("background: var(--bg-error-light); color: var(--error); border: 1px solid var(--border-error); padding: 10px; border-radius: 8px; font-weight: 700;")
+                self.summary.setText(f"{total} conflict(s) found: {len(conflicts)} scheduling + {len(avail_conflicts)} availability/break")
+                self.summary.setStyleSheet("background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; padding: 10px; border-radius: 8px; font-weight: 700;")
 
             # Combine into table
             self.table.setRowCount(total)
