@@ -216,6 +216,11 @@ class TimetableGridWidget(QFrame):
             item = self.grid.takeAt(0)
             widget = item.widget()
             if widget:
+                try:
+                    widget.hide()
+                    widget.setParent(None)
+                except Exception:
+                    pass
                 widget.deleteLater()
         self.zones.clear()
         self.cards.clear()

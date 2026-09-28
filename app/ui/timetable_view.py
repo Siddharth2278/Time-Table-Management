@@ -228,6 +228,9 @@ class TimetableView(QWidget):
     def load_timetable(self):
         if not self.current_semester_id:
             return
+        if getattr(self, "_loading", False):
+            return
+        self._loading = True
         session = get_session()
         try:
             # Working days enabled
@@ -274,6 +277,7 @@ class TimetableView(QWidget):
             self.grid.populate(days, times, entries, breaks=breaks)
         finally:
             session.close()
+            self._loading = False
 
     def _selected_entry_id(self):
         return self.grid.selected_entry_id
