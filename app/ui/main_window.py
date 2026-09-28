@@ -79,12 +79,12 @@ class AnimatedLogo(QLabel):
         if not pm.isNull():
             self.setPixmap(pm.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
-            # Fallback gradient badge if the SVG cannot load
-            self.setText("CT")
+            # Fallback institutional badge if the SVG cannot load
+            self.setText("C")
             self.setStyleSheet(
-                "color: #FFFFFF; font-size: 15px; font-weight: 900; "
-                "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4F46E5, stop:1 #D946EF); "
-                "border-radius: 11px;"
+                "color: #FFFFFF; font-size: 17px; font-weight: 700; font-family: 'Playfair Display', Georgia, serif; "
+                "background: #1C355E; "
+                "border-radius: 2px;"
             )
 
 
@@ -251,7 +251,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self.header)
         self.accent = QFrame()
         self.accent.setFixedHeight(3)
-        self.accent.setStyleSheet("background: #4F46E5; border: none;")
+        self.accent.setStyleSheet("background: #1C355E; border: none;")
         root.addWidget(self.accent)
         body = QWidget()
         body.setObjectName("ContentArea")
