@@ -6,7 +6,8 @@ Inter for UI/data, Roboto Slab for headers. Explicit colors only
 """
 
 FONT_UI = "'Inter', 'Segoe UI', system-ui, sans-serif"
-FONT_HEAD = "'Roboto Slab', 'Inter', serif"
+FONT_HEAD = "'Playfair Display', Georgia, serif"
+FONT_MONO = "'JetBrains Mono', ui-monospace, monospace"
 
 # Institutional palette
 NAVY = "#0F172A"
@@ -35,6 +36,9 @@ def _common() -> str:
     }}
     QLabel#PageTitle, QLabel#HeaderTitle {{
         font-family: {FONT_HEAD};
+    }}
+    QLabel#StatValue, QLabel#StatusPill {{
+        font-family: {FONT_MONO};
     }}
     QToolTip {{
         background-color: #111827;
