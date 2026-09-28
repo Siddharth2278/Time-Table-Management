@@ -135,7 +135,7 @@ class Sidebar(QFrame):
             self.buttons[key] = btn
             layout.addWidget(btn)
         layout.addStretch()
-        self.foot = QLabel("Offline \u2022 SQLite\nv1.0.0")
+        self.foot = QLabel("Offline \u2022 SQLite\nv1.1.0 Archival")
         self.foot.setObjectName("SidebarFoot")
         layout.addWidget(self.foot)
 
