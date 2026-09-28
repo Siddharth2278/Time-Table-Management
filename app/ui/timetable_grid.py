@@ -201,9 +201,9 @@ class TimetableGridWidget(QFrame):
 
     def _apply_grid_style(self):
         if self.dark_mode:
-            self.setStyleSheet("QFrame#TimetableGrid { background: #0F172A; border: 1px solid #22304D; border-radius: 12px; }")
+            self.setStyleSheet("QFrame#TimetableGrid { background: #0F172A; border: 2px solid #0F172A; border-radius: 2px; }")
         else:
-            self.setStyleSheet("QFrame#TimetableGrid { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; }")
+            self.setStyleSheet("QFrame#TimetableGrid { background: #FFFFFF; border: 2px solid #0F172A; border-radius: 2px; }")
 
     def set_theme(self, dark_mode):
         self.dark_mode = dark_mode
@@ -234,18 +234,15 @@ class TimetableGridWidget(QFrame):
         for column, label in enumerate(headers):
             header = QLabel(label)
             header.setAlignment(Qt.AlignCenter)
-            if self.dark_mode:
-                header.setStyleSheet("color: #E0E7FF; background: #1E1B4B; border: 1px solid #3730A3; border-radius: 8px; padding: 10px 5px; font-size: 10.5px; font-weight: 800;")
-            else:
-                header.setStyleSheet("color: #312E81; background: #EEF2FF; border: 1px solid #E0E7FF; border-radius: 8px; padding: 10px 5px; font-size: 10.5px; font-weight: 800;")
+            header.setStyleSheet("color: #FFFFFF; background: #0F172A; border: 1px solid #0F172A; border-radius: 2px; padding: 10px 5px; font-size: 11px; font-weight: 800;")
             self.grid.addWidget(header, 0, column)
         for row, (start, end) in enumerate(times, start=1):
             label = QLabel(f"{start}\n{end}")
             label.setAlignment(Qt.AlignCenter)
             if self.dark_mode:
-                label.setStyleSheet("color: #CBD5E1; background: #141F38; border: 1px solid #22304D; border-radius: 8px; padding: 8px 4px; font-size: 10.5px; font-weight: 700;")
+                label.setStyleSheet("color: #E2E8F0; background: #1E293B; border: 1px solid #0F172A; border-radius: 2px; padding: 8px 4px; font-size: 11px; font-weight: 700;")
             else:
-                label.setStyleSheet("color: #475569; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px 4px; font-size: 10.5px; font-weight: 700;")
+                label.setStyleSheet("color: #0F172A; background: #F8FAFC; border: 1px solid #0F172A; border-radius: 2px; padding: 8px 4px; font-size: 11px; font-weight: 700;")
             self.grid.addWidget(label, row, 0)
             for column, _day in enumerate(days, start=1):
                 zone = DropZone(row - 1, column - 1, self)
