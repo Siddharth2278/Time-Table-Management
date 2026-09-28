@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-cream: #FAF9F6;
+  --color-ink: #111110;
+  --color-indigo-accent: #1C355E;
+  --color-burgundy: #9A2C2C;
+  --color-card-border: #DEDCD3;
+  --color-charcoal: #1C1C1A;
+  --color-slate-soft: #85A3CC;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  background: #FAF9F6;
+  color: #111110;
+}
+
+.dark body {
+  background: #111110;
+  color: #FAF9F6;
+}
+
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(120,120,120,.5) transparent; }
+.custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(120,120,120,.45); border-radius: 999px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(120,120,120,.65); }
