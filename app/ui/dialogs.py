@@ -281,27 +281,25 @@ class LectureDialog(QDialog):
             idx = self.day_combo.findData(day_id)
             if idx >= 0:
                 self.day_combo.setCurrentIndex(idx)
-        # Time
+        # Time (guard malformed DB values)
         self.start_edit = QTimeEdit()
         self.start_edit.setDisplayFormat("HH:mm")
         self.end_edit = QTimeEdit()
         self.end_edit.setDisplayFormat("HH:mm")
+        def _to_qtime(v, fallback):
+            try:
+                h, m = map(int, str(v).split(":")[:2])
+                if 0 <= h < 24 and 0 <= m < 60:
+                    return QTime(h, m)
+            except (ValueError, AttributeError, TypeError):
+                pass
+            return fallback
         if entry:
-            sh, sm = map(int, entry.start_time.split(":"))
-            eh, em = map(int, entry.end_time.split(":"))
-            self.start_edit.setTime(QTime(sh, sm))
-            self.end_edit.setTime(QTime(eh, em))
+            self.start_edit.setTime(_to_qtime(entry.start_time, QTime(9, 0)))
+            self.end_edit.setTime(_to_qtime(entry.end_time, QTime(10, 0)))
         else:
-            if start_time:
-                sh, sm = map(int, start_time.split(":"))
-                self.start_edit.setTime(QTime(sh, sm))
-            else:
-                self.start_edit.setTime(QTime(9, 0))
-            if end_time:
-                eh, em = map(int, end_time.split(":"))
-                self.end_edit.setTime(QTime(eh, em))
-            else:
-                self.end_edit.setTime(QTime(10, 0))
+            self.start_edit.setTime(_to_qtime(start_time, QTime(9, 0)) if start_time else QTime(9, 0))
+            self.end_edit.setTime(_to_qtime(end_time, QTime(10, 0)) if end_time else QTime(10, 0))
         self.type_combo = QComboBox()
         self.type_combo.addItems(["Theory", "Practical", "Lab", "Tutorial"])
         if entry and entry.lecture_type:
