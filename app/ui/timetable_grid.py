@@ -219,6 +219,12 @@ class TimetableGridWidget(QFrame):
                 widget.deleteLater()
         self.zones.clear()
         self.cards.clear()
+        self.selected_entry_id = None
+        self.selected_slot = (-1, -1)
+
+    @staticmethod
+    def _norm(t: str) -> str:
+        return str(t or "").strip()
 
     def populate(self, days, times, entries):
         self.clear_grid()
@@ -253,19 +259,31 @@ class TimetableGridWidget(QFrame):
         self.grid.setColumnMinimumWidth(0, 80)
         for entry in entries:
             try:
-                row = times.index((entry.start_time, entry.end_time))
+                key = (self._norm(entry.start_time), self._norm(entry.end_time))
+                norm_times = [(self._norm(a), self._norm(b)) for a, b in times]
+                row = norm_times.index(key)
                 column = next(index for index, day in enumerate(days) if day.id == entry.day_id)
-            except (ValueError, StopIteration):
+            except (ValueError, StopIteration, AttributeError):
                 continue
-            zone = self.zones[(row, column)]
-            lecture_type = entry.lecture_type if hasattr(entry, 'lecture_type') else "Theory"
-            colors_map = {"Theory": "#EFF6FF", "Practical": "#EEF2FF", "Lab": "#FFFBEB", "Tutorial": "#F5F3FF"}
-            card = LectureCard(entry, row, column, colors_map.get(lecture_type, "#EFF6FF"), zone)
-            card.set_theme(self.dark_mode)
-            zone.layout = QVBoxLayout(zone)
-            zone.layout.setContentsMargins(3, 3, 3, 3)
-            zone.layout.addWidget(card)
-            self.cards[entry.id] = card
+            zone = self.zones.get((row, column))
+            if zone is None:
+                continue
+            try:
+                lecture_type = entry.lecture_type if hasattr(entry, 'lecture_type') else "Theory"
+                colors_map = {"Theory": "#EFF6FF", "Practical": "#EEF2FF", "Lab": "#FFFBEB", "Tutorial": "#F5F3FF"}
+                card = LectureCard(entry, row, column, colors_map.get(lecture_type, "#EFF6FF"), zone)
+                card.set_theme(self.dark_mode)
+                lay = zone.layout()
+                if lay is None:
+                    lay = QVBoxLayout(zone)
+                    lay.setContentsMargins(3, 3, 3, 3)
+                else:
+                    # Stacked conflict: keep both visible, do not orphan
+                    pass
+                lay.addWidget(card)
+                self.cards[entry.id] = card
+            except Exception:
+                continue
 
     def card_selected(self, entry_id):
         self.selected_entry_id = entry_id
