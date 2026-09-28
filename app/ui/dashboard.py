@@ -104,7 +104,10 @@ class DashboardView(QWidget):
                         required_total += max(0, v)
                     except (TypeError, ValueError):
                         continue
-            unscheduled = max(0, required_total - total_lectures)
+            unscheduled = 0
+            for s in sems:
+                comp_s = ConflictService.calculate_timetable_completion(session, s.id)
+                unscheduled += max(0, comp_s["required"] - comp_s["scheduled"])
             conflicts = ConflictService.detect_all_conflicts(session)
             # Include availability/break violations so banner is not falsely green
             try:
