@@ -261,7 +261,13 @@ class TimetableView(QWidget):
                 if t not in times:
                     extra_times.append(t)
             times.extend(extra_times)
-            times = sorted(set(times), key=lambda x: time_to_minutes(x[0]))
+            def _sort_key(x):
+                try:
+                    return time_to_minutes(str(x[0]).strip())
+                except (ValueError, AttributeError, TypeError):
+                    return 10 ** 9
+            times = sorted(set(times), key=_sort_key)
+            times = [t for t in times if _sort_key(t) < 10 ** 9][:24]
             self._times = times
             self._days = days
             self.grid.populate(days, times, entries)
