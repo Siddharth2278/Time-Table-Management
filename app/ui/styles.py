@@ -162,8 +162,8 @@ def _sidebar_qss() -> str:
         color: #FFFFFF;
     }}
     QWidget#Sidebar QPushButton:checked {{
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {INDIGO}, stop:1 #7C3AED);
-        color: #FFFFFF;
+        background-color: #FFFFFF;
+        color: #1C355E;
         font-weight: 700;
     }}
     QLabel#SidebarFoot {{
@@ -179,20 +179,21 @@ def _sidebar_qss() -> str:
 def _light_qss() -> str:
     return _common() + _sidebar_qss() + f"""
     QMainWindow, QWidget#AppRoot {{
-        background-color: #EDF1F7;
+        background-color: #FAF9F6;
     }}
     QWidget#ContentArea {{
-        background-color: #EDF1F7;
+        background-color: #FAF9F6;
     }}
     /* Header */
     QWidget#Header {{
         background-color: #FFFFFF;
-        border-bottom: 1px solid #E2E8F0;
+        border-bottom: 2px solid #0F172A;
     }}
     QLabel#HeaderTitle {{
-        font-size: 17px;
-        font-weight: 800;
-        color: #0F172A;
+        font-family: {FONT_HEAD};
+        font-size: 19px;
+        font-weight: 700;
+        color: #111110;
         letter-spacing: -0.3px;
         background: transparent;
     }}
@@ -223,18 +224,18 @@ def _light_qss() -> str:
         background: #E2E8F0;
         color: #0F172A;
     }}
-    QLabel#PageTitle {{ color: #0F172A; background: transparent; }}
+    QLabel#PageTitle {{ color: #111110; background: transparent; font-family: {FONT_HEAD}; }}
     QLabel#PageSubtitle {{ color: #64748B; background: transparent; }}
-    QLabel#SectionTitle {{ color: #1E293B; background: transparent; }}
-    QLabel#StatValue {{ color: #0F172A; background: transparent; }}
+    QLabel#SectionTitle {{ color: #1E293B; background: transparent; font-family: {FONT_HEAD}; }}
+    QLabel#StatValue {{ color: #111110; background: transparent; }}
     QLabel#StatLabel {{ color: #64748B; background: transparent; }}
     QFrame#ContentCard {{
         background-color: #FFFFFF;
-        border: 1px solid #DCE4EF;
+        border: 2px solid #DEDCD3;
     }}
     QFrame#StatCard {{
         background-color: #FFFFFF;
-        border: 1px solid #DCE4EF;
+        border: 2px solid #DEDCD3;
     }}
     QFrame#Card {{
         background-color: #FFFFFF;
