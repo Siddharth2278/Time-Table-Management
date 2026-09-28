@@ -349,14 +349,21 @@ class MainWindow(QMainWindow):
     def open_timetable_for_semester(self, semester_id: int):
         self.sidebar.set_active("Timetable")
         self.stack.setCurrentIndex(self.key_to_index["Timetable"])
-        idx = self.timetable.sem_combo.findData(semester_id)
-        if idx >= 0:
-            self.timetable.sem_combo.setCurrentIndex(idx)
-        else:
-            self.timetable.refresh()
+        try:
+            self.timetable.sem_combo.blockSignals(True)
             idx = self.timetable.sem_combo.findData(semester_id)
             if idx >= 0:
                 self.timetable.sem_combo.setCurrentIndex(idx)
+            else:
+                self.timetable.refresh()
+                idx = self.timetable.sem_combo.findData(semester_id)
+                if idx >= 0:
+                    self.timetable.sem_combo.setCurrentIndex(idx)
+        finally:
+            try:
+                self.timetable.sem_combo.blockSignals(False)
+            except Exception:
+                pass
         self.timetable.load_timetable()
         self.header.refresh()
 
