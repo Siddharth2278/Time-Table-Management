@@ -112,14 +112,14 @@ def init_db(db_path: Path | None = None, echo: bool = False):
                 "default_start_time": "08:00",
                 "default_end_time": "17:00",
                 "backup_location": str(get_data_dir() / "backups"),
-                "theme": "dark",
+                "theme": "light",
                 "wef_date": "",
             }
             for k, v in defaults.items():
                 session.add(Setting(key=k, value=v))
             session.flush()
         # Ensure expected keys exist for existing DBs
-        for _k, _v in (("theme", "dark"), ("wef_date", "")):
+        for _k, _v in (("theme", "light"), ("wef_date", "")):
             if session.query(Setting).filter(Setting.key == _k).first() is None:
                 session.add(Setting(key=_k, value=_v))
                 session.flush()
