@@ -334,6 +334,8 @@ class TimetableView(QWidget):
                     pass
 
     def handle_grid_drop(self, entry_id, row, column):
+        if not hasattr(self, "_times") or not hasattr(self, "_days"):
+            return
         if row < 0 or row >= len(self._times) or column < 0 or column >= len(self._days):
             return
         new_start, new_end = self._times[row]
