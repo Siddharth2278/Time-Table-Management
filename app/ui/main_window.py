@@ -231,7 +231,7 @@ class Header(QFrame):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("College Timetable Manager")
+        self.setWindowTitle("College Timetable Manager v1.1 Archival")
         self.resize(1280, 780)
         self.setMinimumSize(960, 620)
         try:
