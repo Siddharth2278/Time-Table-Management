@@ -18,7 +18,8 @@ class DropZone(QFrame):
         self.reset_style()
 
     def mousePressEvent(self, event):
-        self.clicked.emit(self.row, self.column)
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self.row, self.column)
         super().mousePressEvent(event)
 
     def dragEnterEvent(self, event):
@@ -145,10 +146,18 @@ class LectureCard(QFrame):
         self._dark_mode = dark_mode
         self._apply_style()
 
+    def _grid(self):
+        w = self.parentWidget()
+        while w is not None and not hasattr(w, "card_selected"):
+            w = w.parentWidget() if hasattr(w, "parentWidget") else None
+        return w
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._drag_start = event.position().toPoint()
-            self.parentWidget().parentWidget().card_selected(self.entry_id)
+            g = self._grid()
+            if g is not None:
+                g.card_selected(self.entry_id)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -163,7 +172,9 @@ class LectureCard(QFrame):
         drag.exec(Qt.MoveAction)
 
     def mouseDoubleClickEvent(self, event):
-        self.parentWidget().parentWidget().emit_card_double_click(self.entry_id)
+        g = self._grid()
+        if g is not None and hasattr(g, "emit_card_double_click"):
+            g.emit_card_double_click(self.entry_id)
         super().mouseDoubleClickEvent(event)
 
 
