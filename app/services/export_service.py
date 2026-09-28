@@ -5,15 +5,29 @@ from app.models import TimetableEntry, Semester, Setting, WorkingDay
 
 def _get_setting(session: Session, key: str, default: str = "") -> str:
     s = session.query(Setting).filter(Setting.key == key).first()
-    return s.value if s else default
+    if s is None or s.value is None:
+        return default
+    return s.value
+
+def _ensure_parent(filepath: Path) -> Path:
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    return filepath
+
+def _safe_sheet_title(name: str) -> str:
+    import re
+    name = (name or "Timetable").strip() or "Timetable"
+    name = re.sub(r'[:/\\\?\*\[\]]', '-', name)
+    return name[:31]
 
 def export_csv(session: Session, semester_id: int, filepath: Path):
+    filepath = _ensure_parent(filepath)
     entries = session.query(TimetableEntry).filter(TimetableEntry.semester_id == semester_id).order_by(TimetableEntry.day_id, TimetableEntry.start_time).all()
     semester = session.query(Semester).filter(Semester.id == semester_id).first()
     college = _get_setting(session, "college_name", "College")
     dept = _get_setting(session, "department", "Department")
     year = _get_setting(session, "academic_year", "2026-27")
-    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+    with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow([f"{college} - {dept} - {year}"])
         writer.writerow([semester.name if semester else f"Semester {semester_id}"])
@@ -33,6 +47,7 @@ def export_csv(session: Session, semester_id: int, filepath: Path):
 def export_excel(session: Session, semester_id: int, filepath: Path):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    filepath = _ensure_parent(filepath)
     entries = session.query(TimetableEntry).filter(TimetableEntry.semester_id == semester_id).order_by(TimetableEntry.day_id, TimetableEntry.start_time).all()
     semester = session.query(Semester).filter(Semester.id == semester_id).first()
     college = _get_setting(session, "college_name", "College")
@@ -40,7 +55,7 @@ def export_excel(session: Session, semester_id: int, filepath: Path):
     year = _get_setting(session, "academic_year", "2026-27")
     wb = Workbook()
     ws = wb.active
-    ws.title = semester.name if semester else "Timetable"
+    ws.title = _safe_sheet_title(semester.name if semester else "Timetable")
     ws.merge_cells('A1:G1')
     ws['A1'] = college
     ws['A1'].font = Font(bold=True, size=14)
