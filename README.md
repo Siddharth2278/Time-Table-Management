@@ -39,7 +39,7 @@ python run.py
 ```
 
 Database is created at `%APPDATA%\CollegeTimetableManager\timetable.db` on first launch with sample data:
-- 12 teachers, 14 rooms/labs, 19 subjects, 15 timetable entries
+- 4 teachers, 4 rooms/labs, 5 subjects, 5 timetable entries (short demo; full 12/14/19/15 set via in-app sample loader)
 
 ## Testing
 
