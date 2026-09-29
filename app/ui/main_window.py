@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QStackedWidget,
-    QFrame, QScrollArea
+    QFrame, QScrollArea, QGraphicsOpacityEffect, QStackedLayout,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
@@ -263,6 +263,9 @@ class MainWindow(QMainWindow):
         body_layout.addWidget(self.sidebar)
         self.stack = QStackedWidget()
         self.stack.setObjectName("ContentArea")
+        stack_layout = self.stack.layout()
+        if stack_layout is not None:
+            stack_layout.setStackingMode(QStackedLayout.StackingMode.StackOne)
         body_layout.addWidget(self.stack, 1)
         root.addWidget(body, 1)
 
@@ -293,6 +296,7 @@ class MainWindow(QMainWindow):
             self.key_to_index[key] = idx
             self.views[key] = view
 
+        self.dashboard.navigate.connect(self.on_navigate)
         self.semesters.openTimetable.connect(self.open_timetable_for_semester)
         self.settings.themeChanged.connect(lambda t: self.apply_theme())
 
@@ -318,41 +322,41 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _clear_effects(root):
-        """Clear opacity effects on a page and all its children.
+        """Clear leftover *opacity* effects on a page and all its children.
 
-        Fade/count-up effects are installed on individual cards, not the
-        page root — clearing only the root leaves stale effects that
-        ghost-paint over the newly shown page.
+        Only QGraphicsOpacityEffect is removed (the ghost vector from the
+        old fade system). Static QGraphicsDropShadowEffect on lecture
+        cards is intentionally preserved.
         """
+        def _kill(w):
+            try:
+                eff = w.graphicsEffect()
+                if isinstance(eff, QGraphicsOpacityEffect):
+                    w.setGraphicsEffect(None)
+            except Exception:
+                pass
+        _kill(root)
         try:
-            root.setGraphicsEffect(None)
+            for child in root.findChildren(QWidget):
+                _kill(child)
         except Exception:
             pass
-        try:
-            from PySide6.QtWidgets import QWidget as _W
-            for child in root.findChildren(_W):
-                try:
-                    child.setGraphicsEffect(None)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+
+    def _show_stack_page(self, idx: int):
+        """One visible page only — never manual show/hide (that stacks layers)."""
+        if idx < 0 or idx >= self.stack.count():
+            return
+        self.stack.setCurrentIndex(idx)
+        for i in self.key_to_index.values():
+            try:
+                self._clear_effects(self.stack.widget(i))
+            except Exception:
+                pass
 
     def on_navigate(self, key):
         idx = self.key_to_index.get(key)
         if idx is not None:
-            # Belt and suspenders: exactly one page visible, no ghost compositing
-            for k, i in self.key_to_index.items():
-                w = self.stack.widget(i)
-                try:
-                    if i == idx:
-                        w.show()
-                    else:
-                        w.hide()
-                    self._clear_effects(w)
-                except Exception:
-                    pass
-            self.stack.setCurrentIndex(idx)
+            self._show_stack_page(idx)
             view = self.views.get(key)
             if view and hasattr(view, "refresh"):
                 try:
@@ -365,17 +369,7 @@ class MainWindow(QMainWindow):
 
     def open_timetable_for_semester(self, semester_id: int):
         self.sidebar.set_active("Timetable")
-        for k, i in self.key_to_index.items():
-            try:
-                w = self.stack.widget(i)
-                if i == self.key_to_index["Timetable"]:
-                    w.show()
-                else:
-                    w.hide()
-                self._clear_effects(w)
-            except Exception:
-                pass
-        self.stack.setCurrentIndex(self.key_to_index["Timetable"])
+        self._show_stack_page(self.key_to_index["Timetable"])
         try:
             self.timetable.sem_combo.blockSignals(True)
             idx = self.timetable.sem_combo.findData(semester_id)
