@@ -9,7 +9,7 @@ from app.models import Teacher, Subject, Room, Semester, WorkingDay, TimeSlot, T
 from app.utils.validators import is_valid_email
 from app.utils.helpers import time_to_minutes
 from app.services.conflict_service import ConflictService
-from app.ui.widgets import pin_dialog_buttons
+from app.ui.widgets import pin_dialog_buttons, style_dialog_buttons
 
 def show_error(parent, msg):
     # Keep validation and conflict text exactly as produced by the service.
@@ -55,6 +55,7 @@ class TeacherDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+        style_dialog_buttons(btns)
         pin_dialog_buttons(self)
 
     def accept(self):
@@ -107,6 +108,7 @@ class RoomDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+        style_dialog_buttons(btns)
         pin_dialog_buttons(self)
 
     def accept(self):
@@ -192,6 +194,7 @@ class SubjectDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+        style_dialog_buttons(btns)
         pin_dialog_buttons(self)
 
     def closeEvent(self, event):
@@ -345,6 +348,7 @@ class LectureDialog(QDialog):
         btns.rejected.connect(self.reject)
         btn_layout.addWidget(btns)
         layout.addLayout(btn_layout)
+        style_dialog_buttons(btns)
         pin_dialog_buttons(self)
 
     def _set_info(self, text, banner):
@@ -545,6 +549,7 @@ class TimeSlotDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+        style_dialog_buttons(btns)
         pin_dialog_buttons(self)
 
     def accept(self):
@@ -642,6 +647,7 @@ class AvailabilityDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+        style_dialog_buttons(btns)
         pin_dialog_buttons(self)
 
     def accept(self):
