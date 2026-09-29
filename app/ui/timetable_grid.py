@@ -3,9 +3,21 @@ from PySide6.QtGui import QColor, QDrag
 from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QVBoxLayout, QGraphicsDropShadowEffect
 
 
+def _polish(widget):
+    try:
+        style = widget.style()
+        style.unpolish(widget)
+        style.polish(widget)
+        widget.update()
+    except Exception:
+        pass
+
+
 class DropZone(QFrame):
     clicked = Signal(int, int)
     drop_requested = Signal(int, int, int)
+
+    STATES = ("", "drop", "ok", "bad")
 
     def __init__(self, row, column, parent=None):
         super().__init__(parent)
@@ -25,9 +37,7 @@ class DropZone(QFrame):
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("application/x-timetable-entry"):
             event.acceptProposedAction()
-            self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #1C355E; border-radius: 2px; background: #EAEFF5; }"
-            )
+            self.set_state("drop")
         else:
             event.ignore()
 
@@ -56,36 +66,23 @@ class DropZone(QFrame):
         self.reset_style()
         event.acceptProposedAction()
 
+    def set_state(self, state: str):
+        self.setProperty("state", state if state in self.STATES else "")
+        _polish(self)
+
     def reset_style(self):
-        if self.dark_mode:
-            self.setStyleSheet("QFrame#DropZone { border: 1px solid #2A3A5C; border-radius: 2px; background: #141F38; }")
-        else:
-            self.setStyleSheet("QFrame#DropZone { border: 1px solid #DEDCD3; border-radius: 2px; background: #FFFFFF; }")
+        self.set_state("")
 
     def set_theme(self, dark_mode):
         self.dark_mode = dark_mode
-        self.reset_style()
+        _polish(self)
 
     def set_drop_feedback(self, valid):
-        if valid:
-            self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #059669; border-radius: 2px; background: #ECFDF5; }"
-            )
-        else:
-            self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #9A2C2C; border-radius: 2px; background: #FEF2F2; }"
-            )
+        self.set_state("ok" if valid else "bad")
 
 
 class LectureCard(QFrame):
-    ACCENTS = {
-        "Theory": ("#FFFFFF", "#0F172A"),
-        "Practical": ("#FFFFFF", "#1E40AF"),
-        "Lab": ("#FFFFFF", "#D97706"),
-        "Tutorial": ("#FFFFFF", "#059669"),
-    }
-
-    def __init__(self, entry, row, column, color, parent=None):
+    def __init__(self, entry, row, column, parent=None):
         super().__init__(parent)
         self.entry_id = entry.id
         self.row = row
@@ -95,56 +92,44 @@ class LectureCard(QFrame):
         self.setMinimumHeight(66)
         lecture_type = getattr(entry, "lecture_type", "Theory") or "Theory"
         self.lecture_type = lecture_type
-        self._dark_mode = False
-        self._apply_style()
+        self.setProperty("ltype", lecture_type)
+        self.setProperty("conflict", False)
+        self.setProperty("selected", False)
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(6)
-        shadow.setOffset(0, 1)
-        shadow.setColor(QColor(17, 17, 16, 14))
+        shadow.setBlurRadius(8)
+        shadow.setOffset(0, 2)
+        shadow.setColor(QColor(0, 0, 0, 36))
         self.setGraphicsEffect(shadow)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(9, 7, 7, 7)
+        layout.setContentsMargins(10, 8, 8, 8)
         layout.setSpacing(2)
-        subject = QLabel(f"{entry.subject.code if entry.subject else ''}  {entry.subject.name if entry.subject else 'Untitled'}")
-        self.subject_label = subject
-        subject.setStyleSheet(self._label_style("#F8FAFC", "#0F172A", "800", "11.5px"))
-        subject.setWordWrap(True)
-        teacher = QLabel(entry.teacher.name if entry.teacher else "Unassigned teacher")
-        self.teacher_label = teacher
-        teacher.setStyleSheet(self._label_style("#CBD5E1", "#475569", "600", "10.5px"))
-        room = QLabel(f"{entry.room.name if entry.room else 'No room'}  \u00b7  {entry.start_time}-{entry.end_time}")
-        self.room_label = room
-        room.setStyleSheet(self._label_style("#94A3B8", "#64748B", "500", "10px"))
-        layout.addWidget(subject)
-        layout.addWidget(teacher)
-        layout.addWidget(room)
+        self.code_label = QLabel(entry.subject.code if entry.subject and entry.subject.code else "")
+        self.code_label.setObjectName("CardCode")
+        self.code_label.setWordWrap(True)
+        self.title_label = QLabel(entry.subject.name if entry.subject and entry.subject.name else "Untitled")
+        self.title_label.setObjectName("CardTitle")
+        self.title_label.setWordWrap(True)
+        self.teacher_label = QLabel(entry.teacher.name if entry.teacher else "Unassigned teacher")
+        self.teacher_label.setObjectName("CardMeta")
+        self.teacher_label.setWordWrap(True)
+        room = entry.room.name if entry.room else "No room"
+        self.time_label = QLabel(f"{room}  •  {entry.start_time}-{entry.end_time}")
+        self.time_label.setObjectName("CardTime")
+        self.time_label.setWordWrap(True)
+        layout.addWidget(self.code_label)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.teacher_label)
+        layout.addWidget(self.time_label)
         self._drag_start = QPoint()
+        _polish(self)
 
-    def _label_style(self, dark_color, light_color, weight, size):
-        color = dark_color if self._dark_mode else light_color
-        return f"color: {color}; font-size: {size}; font-weight: {weight}; background: transparent; border: none;"
+    def set_conflict(self, value: bool):
+        self.setProperty("conflict", bool(value))
+        _polish(self)
 
-    def _apply_style(self):
-        bg, accent = self.ACCENTS.get(self.lecture_type, ("#FFFFFF", "#0F172A"))
-        if self._dark_mode:
-            bg = {"#EFF6FF": "#172554", "#EEF2FF": "#1E1B4B", "#FFFBEB": "#422006", "#F5F3FF": "#2E1065", "#FFFFFF": "#172554"}.get(bg, "#172554")
-            border = "#0F172A"
-        else:
-            border = "#0F172A"
-        self._base_style = (
-            f"QFrame#LectureCard {{ background: {bg}; border: 2px solid {border}; "
-            f"border-left: 4px solid {accent}; border-radius: 2px; padding: 6px; }} "
-            f"QFrame#LectureCard:hover {{ border: 2px solid {accent}; border-left: 4px solid {accent}; }}"
-        )
-        self.setStyleSheet(self._base_style)
-        if hasattr(self, "subject_label"):
-            self.subject_label.setStyleSheet(self._label_style("#F8FAFC", "#0F172A", "800", "11.5px"))
-            self.teacher_label.setStyleSheet(self._label_style("#CBD5E1", "#475569", "600", "10.5px"))
-            self.room_label.setStyleSheet(self._label_style("#94A3B8", "#64748B", "500", "10px"))
-
-    def set_theme(self, dark_mode):
-        self._dark_mode = dark_mode
-        self._apply_style()
+    def set_selected(self, value: bool):
+        self.setProperty("selected", bool(value))
+        _polish(self)
 
     def _grid(self):
         w = self.parentWidget()
@@ -197,19 +182,15 @@ class TimetableGridWidget(QFrame):
         self.selected_entry_id = None
         self.selected_slot = (-1, -1)
         self.dark_mode = False
-        self._apply_grid_style()
-
-    def _apply_grid_style(self):
-        if self.dark_mode:
-            self.setStyleSheet("QFrame#TimetableGrid { background: #0F172A; border: 2px solid #0F172A; border-radius: 2px; }")
-        else:
-            self.setStyleSheet("QFrame#TimetableGrid { background: #FFFFFF; border: 2px solid #0F172A; border-radius: 2px; }")
 
     def set_theme(self, dark_mode):
+        # Colors come from the application QSS; just re-polish everything.
         self.dark_mode = dark_mode
-        self._apply_grid_style()
+        _polish(self)
         for card in self.cards.values():
-            card.set_theme(dark_mode)
+            _polish(card)
+        for zone in self.zones.values():
+            _polish(zone)
 
     def clear_grid(self):
         while self.grid.count():
@@ -231,36 +212,35 @@ class TimetableGridWidget(QFrame):
     def _norm(t: str) -> str:
         return str(t or "").strip()
 
-    def populate(self, days, times, entries, breaks=None):
+    def populate(self, days, times, entries, breaks=None, conflict_ids=None):
         self.clear_grid()
         self.days = days
         self.times = times
         breaks = breaks or {}
+        conflict_ids = set(conflict_ids or [])
         norm_breaks = {(self._norm(a), self._norm(b)): n for (a, b), n in breaks.items()}
-        headers = ["DAY ↓ TIME →"] + [day.name.upper() for day in days]
-        for column, label in enumerate(headers):
+        corner = QLabel("DAY ↓ TIME →")
+        corner.setObjectName("GridCorner")
+        corner.setAlignment(Qt.AlignCenter)
+        self.grid.addWidget(corner, 0, 0)
+        headers = [day.name.upper() for day in days]
+        for column, label in enumerate(headers, start=1):
             header = QLabel(label)
+            header.setObjectName("GridHead")
             header.setAlignment(Qt.AlignCenter)
-            header.setStyleSheet("color: #57534E; background: #F3F1EA; border: 1px solid #DEDCD3; border-radius: 2px; padding: 10px 5px; font-size: 11px; font-weight: 700;")
             self.grid.addWidget(header, 0, column)
         for row, (start, end) in enumerate(times, start=1):
             label = QLabel(f"{start}\n{end}")
+            label.setObjectName("GridTime")
             label.setAlignment(Qt.AlignCenter)
-            if self.dark_mode:
-                label.setStyleSheet("color: #E2E8F0; background: #1E293B; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; font-size: 11px; font-weight: 700;")
-            else:
-                label.setStyleSheet("color: #111110; background: #F3F1EA; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;")
             self.grid.addWidget(label, row, 0)
             is_break = (self._norm(start), self._norm(end)) in norm_breaks
             for column, _day in enumerate(days, start=1):
                 if is_break:
                     bname = str(norm_breaks.get((self._norm(start), self._norm(end)), "Break")).upper()
                     blabel = QLabel(bname)
+                    blabel.setObjectName("BreakCell")
                     blabel.setAlignment(Qt.AlignCenter)
-                    blabel.setStyleSheet(
-                        "color: #78716C; background: #F5F5F4; border: 1px solid #DEDCD3; border-radius: 2px; padding: 8px 4px; "
-                        "font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px;"
-                    )
                     self.grid.addWidget(blabel, row, column)
                     continue
                 zone = DropZone(row - 1, column - 1, self)
@@ -284,10 +264,9 @@ class TimetableGridWidget(QFrame):
             if zone is None:
                 continue
             try:
-                lecture_type = entry.lecture_type if hasattr(entry, 'lecture_type') else "Theory"
-                colors_map = {"Theory": "#EFF6FF", "Practical": "#EEF2FF", "Lab": "#FFFBEB", "Tutorial": "#F5F3FF"}
-                card = LectureCard(entry, row, column, colors_map.get(lecture_type, "#EFF6FF"), zone)
-                card.set_theme(self.dark_mode)
+                card = LectureCard(entry, row, column, zone)
+                if entry.id in conflict_ids:
+                    card.set_conflict(True)
                 lay = zone.layout()
                 if lay is None:
                     lay = QVBoxLayout(zone)
@@ -303,10 +282,7 @@ class TimetableGridWidget(QFrame):
     def card_selected(self, entry_id):
         self.selected_entry_id = entry_id
         for card in self.cards.values():
-            if card.entry_id == entry_id:
-                card.setStyleSheet(card._base_style + " QFrame#LectureCard { border: 2px solid #1C355E; }")
-            else:
-                card.setStyleSheet(card._base_style)
+            card.set_selected(card.entry_id == entry_id)
 
     def emit_card_double_click(self, entry_id):
         self.selected_entry_id = entry_id

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog, QFrame
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QPixmap
 from app.database import get_session
@@ -36,7 +36,12 @@ class TimetableView(QWidget):
         sub.setObjectName("PageSubtitle")
         layout.addWidget(sub)
 
-        # Actions bar
+        # Actions bar — grouped toolbar card.
+        toolbar_card = QFrame()
+        toolbar_card.setObjectName("Card")
+        toolbar_inner = QVBoxLayout(toolbar_card)
+        toolbar_inner.setContentsMargins(16, 12, 16, 12)
+        toolbar_inner.setSpacing(8)
         actions = QGridLayout()
         actions.setHorizontalSpacing(6)
         actions.setVerticalSpacing(6)
@@ -82,7 +87,8 @@ class TimetableView(QWidget):
         self.print_btn.clicked.connect(lambda: self.export("pdf"))
         actions.addWidget(self.print_btn, 1, 4)
         actions.setColumnStretch(5, 1)
-        layout.addLayout(actions)
+        toolbar_inner.addLayout(actions)
+        layout.addWidget(toolbar_card)
 
         # Completion bar
         self.completion_label = QLabel("")
@@ -109,18 +115,20 @@ class TimetableView(QWidget):
         self.format_status.setWordWrap(True)
         layout.addWidget(self.format_status)
         self.format_preview = QLabel("No format photo selected")
+        self.format_preview.setObjectName("FormatPreview")
         self.format_preview.setMinimumHeight(72)
         self.format_preview.setAlignment(Qt.AlignCenter)
-        self.format_preview.setStyleSheet("color: #64748B; font-size: 12px; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 6px;")
         layout.addWidget(self.format_preview)
         self.load_semesters()
 
     def show_conflict_notice(self, message):
-        self.conflict_notice.setText(f"\u274c Blocked \u2014 scheduling conflict:\n{message}")
-        self.conflict_notice.setStyleSheet(
-            "color: #991B1B; background: #FEF2F2; border: 1px solid #FECACA; "
-            "border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 12.5px;"
-        )
+        self.conflict_notice.setText(f"Blocked — scheduling conflict:\n{message}")
+        self.conflict_notice.setObjectName("BannerErr")
+        try:
+            self.style().unpolish(self.conflict_notice)
+            self.style().polish(self.conflict_notice)
+        except Exception:
+            pass
         self.conflict_notice.show()
 
     def clear_conflict_notice(self):
@@ -274,7 +282,19 @@ class TimetableView(QWidget):
             times = [t for t in times if _sort_key(t) < 10 ** 9][:24]
             self._times = times
             self._days = days
-            self.grid.populate(days, times, entries, breaks=breaks)
+            # Real conflict states for lecture cards (existing ConflictService output).
+            conflict_ids = set()
+            try:
+                for c in ConflictService.detect_all_conflicts(session):
+                    for e in c.get("entries", ()):
+                        try:
+                            if e.semester_id == self.current_semester_id:
+                                conflict_ids.add(e.id)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            self.grid.populate(days, times, entries, breaks=breaks, conflict_ids=conflict_ids)
         finally:
             session.close()
             self._loading = False
