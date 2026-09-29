@@ -55,7 +55,7 @@ class TeacherView(QWidget):
         layout.addLayout(btns)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["ID", "Name", "Email", "Department", "Designation", "Status"])
+        self.table.setHorizontalHeaderLabels(["ID", "NAME", "EMAIL", "DEPARTMENT", "DESIGNATION", "STATUS"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -81,15 +81,25 @@ class TeacherView(QWidget):
             for r, t in enumerate(teachers):
                 self.table.setItem(r, 0, QTableWidgetItem(str(t.id)))
                 self.table.setItem(r, 1, QTableWidgetItem(t.name))
-                self.table.setItem(r, 2, QTableWidgetItem(t.email or ""))
+                from PySide6.QtGui import QFont as _QF
+                email_item = QTableWidgetItem(t.email or "")
+                email_item.setFont(_QF("JetBrains Mono", 9))
+                self.table.setItem(r, 2, email_item)
                 self.table.setItem(r, 3, QTableWidgetItem(t.department or ""))
                 self.table.setItem(r, 4, QTableWidgetItem(t.designation or ""))
+                # Web-style status pill: same strings, pill colors only.
                 status_item = QTableWidgetItem(t.status or "")
+                status_item.setTextAlignment(Qt.AlignCenter)
+                _bf = _QF()
+                _bf.setBold(True)
+                status_item.setFont(_bf)
                 from PySide6.QtGui import QColor as _QC
                 if t.status == "Active":
-                    status_item.setForeground(_QC("#059669"))
+                    status_item.setForeground(_QC("#166534"))
+                    status_item.setBackground(_QC("#DCFCE7"))
                 else:
-                    status_item.setForeground(_QC("#DC2626"))
+                    status_item.setForeground(_QC("#991B1B"))
+                    status_item.setBackground(_QC("#FEE2E2"))
                 self.table.setItem(r, 5, status_item)
                 for c in range(6):
                     it = self.table.item(r, c)
