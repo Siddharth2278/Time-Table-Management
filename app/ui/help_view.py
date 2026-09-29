@@ -19,7 +19,7 @@ class HelpView(QWidget):
         title_row.addWidget(title)
         title_row.addStretch()
         self.status = QLabel("Offline guide")
-        self.status.setStyleSheet("color: #065F46; font-weight: 700; font-size: 12px; background: #ECFDF5; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 14px;")
+        self.status.setObjectName("StatusPill")
         title_row.addWidget(self.status)
         outer.addLayout(title_row)
 
@@ -87,7 +87,6 @@ class HelpView(QWidget):
                 label.setWordWrap(True)
                 label.setTextInteractionFlags(Qt.TextSelectableByMouse)
                 label.setObjectName("HelpBody")
-                label.setStyleSheet("font-size: 12.5px; padding: 2px 0; background: transparent; border: none;")
                 group_layout.addWidget(label)
             layout.addWidget(group)
 

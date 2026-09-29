@@ -324,7 +324,7 @@ class LectureDialog(QDialog):
         # Info label for suggestions
         self.info_label = QLabel("")
         self.info_label.setWordWrap(True)
-        self.info_label.setStyleSheet("color: #DC2626; font-size: 11px;")
+        self.info_label.setObjectName("InfoBar")
         layout.addWidget(self.info_label)
 
         if not self.entry:
@@ -341,6 +341,16 @@ class LectureDialog(QDialog):
         btns.rejected.connect(self.reject)
         btn_layout.addWidget(btns)
         layout.addLayout(btn_layout)
+
+    def _set_info(self, text, banner):
+        """Themed info line: 'InfoBar' neutral, 'BannerOk' success, 'BannerErr' error."""
+        self.info_label.setText(text)
+        self.info_label.setObjectName(banner)
+        try:
+            self.style().unpolish(self.info_label)
+            self.style().polish(self.info_label)
+        except Exception:
+            pass
 
     def _populate_subjects(self):
         sem_id = self.sem_combo.currentData()
@@ -404,14 +414,12 @@ class LectureDialog(QDialog):
                     self.end_edit.blockSignals(True)
                     self.end_edit.setTime(end)
                     self.end_edit.blockSignals(False)
-                    self.info_label.setText(f"Auto: {subj.code} → {subj.name} | Teacher: {self.teacher_combo.currentText()} | Room: {self.room_combo.currentText()} | Duration: {dur} min")
-                    self.info_label.setStyleSheet("color: #065F46; font-size: 11px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px;")
+                    self._set_info(f"Auto: {subj.code} → {subj.name} | Teacher: {self.teacher_combo.currentText()} | Room: {self.room_combo.currentText()} | Duration: {dur} min", "BannerOk")
                 except:
                     pass
             elif self.entry:
                 # For edit, just show hint
-                self.info_label.setText(f"Selected: {subj.code} — {subj.name} | Teacher: {self.teacher_combo.currentText()} | Room: {self.room_combo.currentText()}")
-                self.info_label.setStyleSheet("color: #334155; font-size: 11px;")
+                self._set_info(f"Selected: {subj.code} — {subj.name} | Teacher: {self.teacher_combo.currentText()} | Room: {self.room_combo.currentText()}", "InfoBar")
         except Exception:
             pass
 

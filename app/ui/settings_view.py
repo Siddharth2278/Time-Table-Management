@@ -1,101 +1,129 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QFormLayout, QMessageBox, QGroupBox, QTimeEdit, QComboBox, QScrollArea
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QFormLayout, QMessageBox, QGroupBox, QTimeEdit, QComboBox, QScrollArea, QFileDialog
+)
 from PySide6.QtCore import QTime, Signal
+from PySide6.QtCore import Qt
+from pathlib import Path
 from app.database import get_session, get_data_dir, get_db_path
 from app.models import Setting
+from app.services.backup_service import backup_database, restore_database, export_json, import_json
+from app.ui.widgets import page_header, show_toast
+
 
 class SettingsView(QWidget):
     themeChanged = Signal(str)
+
     def __init__(self):
         super().__init__()
         self._updating = False
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(0)
-
-        title = QLabel("Settings")
-        title.setObjectName("PageTitle")
-        outer.addWidget(title)
-        sub = QLabel("Configure college and timetable preferences")
-        sub.setObjectName("PageSubtitle")
-        outer.addWidget(sub)
+        outer.setContentsMargins(22, 18, 22, 18)
+        outer.setSpacing(12)
+        outer.addWidget(page_header("Settings", "College profile, hours, appearance and data backup."))
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; } QWidget { background: transparent; }")
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         outer.addWidget(scroll, 1)
 
         container = QWidget()
+        container.setStyleSheet("background: transparent; border: none;")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 8, 0)
-        layout.setSpacing(16)
+        layout.setSpacing(14)
 
-        # College info
-        self.group_college = QGroupBox("College Information")
+        self.group_college = QGroupBox("COLLEGE INFORMATION")
         form = QFormLayout(self.group_college)
         form.setContentsMargins(16, 22, 16, 16)
         form.setSpacing(12)
-        form.setLabelAlignment(form.labelAlignment())
         self.college_edit = QLineEdit()
         self.college_edit.setPlaceholderText("e.g., Government Polytechnic, Awasari")
         self.dept_edit = QLineEdit()
         self.dept_edit.setPlaceholderText("e.g., Computer Engineering")
         self.year_edit = QLineEdit()
         self.year_edit.setPlaceholderText("e.g., 2026-27")
-        for w in [self.college_edit, self.dept_edit, self.year_edit]:
-            w.setMinimumHeight(36)
         form.addRow("College Name:", self.college_edit)
         form.addRow("Department:", self.dept_edit)
         form.addRow("Academic Year:", self.year_edit)
         layout.addWidget(self.group_college)
 
-        # Time defaults
-        self.group_time = QGroupBox("Default Timetable Hours")
+        self.group_time = QGroupBox("DEFAULT TIMETABLE HOURS")
         tf = QFormLayout(self.group_time)
         tf.setContentsMargins(16, 22, 16, 16)
         tf.setSpacing(12)
         self.start_edit = QTimeEdit()
         self.start_edit.setDisplayFormat("HH:mm")
-        self.start_edit.setMinimumHeight(36)
         self.end_edit = QTimeEdit()
         self.end_edit.setDisplayFormat("HH:mm")
-        self.end_edit.setMinimumHeight(36)
         tf.addRow("Default Start:", self.start_edit)
         tf.addRow("Default End:", self.end_edit)
         layout.addWidget(self.group_time)
 
-        # Appearance
-        self.group_appear = QGroupBox("Appearance")
+        self.group_appear = QGroupBox("APPEARANCE")
         af = QFormLayout(self.group_appear)
         af.setContentsMargins(16, 22, 16, 16)
         af.setSpacing(10)
         self.theme_combo = QComboBox()
-        self.theme_combo.setMinimumHeight(36)
-        self.theme_combo.addItem("Light — soft & clean", "light")
         self.theme_combo.addItem("Dark — low brightness", "dark")
+        self.theme_combo.addItem("Light — soft & clean", "light")
         af.addRow("Theme:", self.theme_combo)
-        hint2 = QLabel("Dark reduces eye strain. Takes effect after Save.")
-        hint2.setObjectName("PageSubtitle")
+        hint2 = QLabel("Takes effect after Save.")
+        hint2.setObjectName("Muted")
         hint2.setWordWrap(True)
         af.addRow("", hint2)
         layout.addWidget(self.group_appear)
 
-        # Info - subtle
+        self.group_backup = QGroupBox("DATA BACKUP")
+        bf = QVBoxLayout(self.group_backup)
+        bf.setContentsMargins(16, 20, 16, 16)
+        bf.setSpacing(8)
+        note = QLabel("SQLite database file backup, plus full JSON export / import. Restoring replaces current data — restart the app afterwards.")
+        note.setObjectName("Muted")
+        note.setWordWrap(True)
+        bf.addWidget(note)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.backup_btn = QPushButton("Backup Now")
+        self.backup_btn.setObjectName("SecondaryButton")
+        self.backup_btn.setCursor(Qt.PointingHandCursor)
+        self.backup_btn.clicked.connect(self.backup_now)
+        row.addWidget(self.backup_btn)
+        self.restore_btn = QPushButton("Restore")
+        self.restore_btn.setObjectName("SecondaryButton")
+        self.restore_btn.setCursor(Qt.PointingHandCursor)
+        self.restore_btn.clicked.connect(self.restore_now)
+        row.addWidget(self.restore_btn)
+        self.export_btn = QPushButton("Export JSON")
+        self.export_btn.setObjectName("SecondaryButton")
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.clicked.connect(self.export_data)
+        row.addWidget(self.export_btn)
+        self.import_btn = QPushButton("Import JSON")
+        self.import_btn.setObjectName("SecondaryButton")
+        self.import_btn.setCursor(Qt.PointingHandCursor)
+        self.import_btn.clicked.connect(self.import_data)
+        row.addWidget(self.import_btn)
+        row.addStretch()
+        bf.addLayout(row)
+        layout.addWidget(self.group_backup)
+
         self.info_label = QLabel("")
-        self.info_label.setStyleSheet("color: #64748B; font-size: 11px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px;")
+        self.info_label.setObjectName("InfoBar")
         self.info_label.setWordWrap(True)
         layout.addWidget(self.info_label)
 
         layout.addStretch()
         scroll.setWidget(container)
 
-        # Save bar - fixed at bottom
         btns = QHBoxLayout()
-        btns.setContentsMargins(0, 12, 0, 0)
+        btns.setContentsMargins(0, 4, 0, 0)
         btns.addStretch()
         self.save_btn = QPushButton("  Save Settings  ")
         self.save_btn.setObjectName("PrimaryButton")
-        self.save_btn.setMinimumHeight(38)
         self.save_btn.setMinimumWidth(140)
+        self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.clicked.connect(self.save)
         btns.addWidget(self.save_btn)
         outer.addLayout(btns)
@@ -105,7 +133,7 @@ class SettingsView(QWidget):
         session = get_session()
         try:
             def get(key, default=""):
-                s = session.query(Setting).filter(Setting.key==key).first()
+                s = session.query(Setting).filter(Setting.key == key).first()
                 return s.value if s else default
             self.college_edit.setText(get("college_name", "My College"))
             self.dept_edit.setText(get("department", "Computer Engineering"))
@@ -117,10 +145,10 @@ class SettingsView(QWidget):
                 eh, em = map(int, end.split(":"))
                 self.start_edit.setTime(QTime(sh, sm))
                 self.end_edit.setTime(QTime(eh, em))
-            except:
+            except Exception:
                 self.start_edit.setTime(QTime(10, 15))
                 self.end_edit.setTime(QTime(17, 15))
-            theme = get("theme", "light")
+            theme = get("theme", "dark")
             idx = self.theme_combo.findData(theme)
             if idx >= 0:
                 self.theme_combo.setCurrentIndex(idx)
@@ -152,7 +180,7 @@ class SettingsView(QWidget):
         session = get_session()
         try:
             def set_key(k, v):
-                s = session.query(Setting).filter(Setting.key==k).first()
+                s = session.query(Setting).filter(Setting.key == k).first()
                 if s:
                     s.value = v
                 else:
@@ -166,9 +194,63 @@ class SettingsView(QWidget):
             set_key("theme", theme)
             session.commit()
             self.themeChanged.emit(theme)
-            QMessageBox.information(self, "Saved", "Settings saved and theme applied.")
+            show_toast(self, "Settings saved and theme applied.")
         except Exception as e:
             session.rollback()
             QMessageBox.critical(self, "Error", str(e))
+        finally:
+            session.close()
+
+    def backup_now(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Backup Database", str(get_data_dir() / "timetable_backup.db"), "SQLite DB (*.db)")
+        if not path:
+            return
+        try:
+            backup_database(get_db_path(), Path(path))
+            show_toast(self, "Backup saved.")
+        except Exception as e:
+            QMessageBox.critical(self, "Backup Failed", str(e))
+
+    def restore_now(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Restore Database", str(get_data_dir()), "SQLite DB (*.db)")
+        if not path:
+            return
+        if QMessageBox.question(self, "Confirm Restore", "This will overwrite the current database with the backup.\n\nContinue?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            restore_database(get_db_path(), Path(path))
+            QMessageBox.information(self, "Restore Complete", "Database restored successfully. Please restart the application for all views to refresh.")
+        except Exception as e:
+            QMessageBox.critical(self, "Restore Failed", str(e))
+
+    def export_data(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export JSON", str(get_data_dir() / "timetable_export.json"), "JSON (*.json)")
+        if not path:
+            return
+        session = get_session()
+        try:
+            export_json(session, Path(path))
+            show_toast(self, "Data exported.")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
+        finally:
+            session.close()
+
+    def import_data(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import JSON", str(get_data_dir()), "JSON (*.json)")
+        if not path:
+            return
+        if QMessageBox.question(self, "Confirm Import", "Importing will replace all current data.\n\nContinue?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        session = get_session()
+        try:
+            import_json(session, Path(path))
+            QMessageBox.information(self, "Imported", "Data imported successfully. Please restart the application.")
+        except Exception as e:
+            QMessageBox.critical(self, "Import Failed", str(e))
         finally:
             session.close()
