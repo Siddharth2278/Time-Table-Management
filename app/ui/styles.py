@@ -341,18 +341,18 @@ def _light_qss() -> str:
     QComboBox QAbstractItemView {{
         background-color: #FFFFFF;
         color: #111110;
-        selection-background-color: {INDIGO_SOFT};
-        selection-color: {INDIGO_HOVER};
-        border: 1px solid #E2E8F0;
-        border-radius: 8px;
+        selection-background-color: #EAEFF5;
+        selection-color: #1C355E;
+        border: 1px solid #DEDCD3;
+        border-radius: 2px;
         padding: 4px;
         outline: none;
     }}
-    /* Group boxes */
+    /* Group boxes — web Card: 1px #DEDCD3, rounded-sm */
     QGroupBox {{
         background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
+        border: 1px solid #DEDCD3;
+        border-radius: 2px;
         margin-top: 16px;
         padding: 16px;
         padding-top: 22px;
@@ -364,16 +364,16 @@ def _light_qss() -> str:
         subcontrol-origin: margin;
         left: 14px;
         padding: 4px 12px;
-        background-color: {INDIGO};
+        background-color: #1C355E;
         color: #FFFFFF;
-        border-radius: 6px;
+        border-radius: 2px;
         font-size: 12px;
         font-weight: 700;
     }}
     /* Progress */
     QProgressBar {{
-        border: 1px solid #E2E8F0;
-        border-radius: 8px;
+        border: 1px solid #DEDCD3;
+        border-radius: 2px;
         text-align: center;
         background-color: #F1F5F9;
         height: 20px;
@@ -382,30 +382,30 @@ def _light_qss() -> str:
         font-size: 11px;
     }}
     QProgressBar::chunk {{
-        background-color: {INDIGO};
-        border-radius: 7px;
+        background-color: #1C355E;
+        border-radius: 2px;
     }}
-    /* Tabs */
+    /* Tabs — web rounded-sm */
     QTabWidget::pane {{
-        border: 1px solid #E2E8F0;
+        border: 1px solid #DEDCD3;
         background: #FFFFFF;
-        border-radius: 12px;
+        border-radius: 2px;
         top: -1px;
     }}
     QTabBar::tab {{
         padding: 10px 18px;
         background: #F1F5F9;
-        border: 1px solid #E2E8F0;
-        border-radius: 8px 8px 0 0;
+        border: 1px solid #DEDCD3;
+        border-radius: 2px 2px 0 0;
         margin-right: 4px;
         color: #64748B;
         font-weight: 600;
     }}
     QTabBar::tab:selected {{
         background: #FFFFFF;
-        color: {INDIGO_HOVER};
+        color: #16294A;
         font-weight: 700;
-        border-bottom: 2px solid {INDIGO};
+        border-bottom: 2px solid #1C355E;
     }}
     /* Dialogs + message boxes — always light & readable */
     QDialog {{
