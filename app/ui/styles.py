@@ -314,19 +314,19 @@ def _light_qss() -> str:
         background-color: #F3F1EA;
         border: none;
     }}
-    /* Inputs */
+    /* Inputs — web ui.tsx: h-10, rounded-sm, 1px #DEDCD3, focus #1C355E */
     QLineEdit, QComboBox, QSpinBox, QTimeEdit, QTextEdit {{
         background-color: #FFFFFF;
-        border: 1.5px solid #CBD5E1;
-        border-radius: 8px;
+        border: 1px solid #DEDCD3;
+        border-radius: 2px;
         padding: 8px 12px;
         font-size: 13px;
         color: #111110;
-        selection-background-color: {INDIGO};
+        selection-background-color: #1C355E;
         selection-color: #FFFFFF;
     }}
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus, QTextEdit:focus {{
-        border: 2px solid {INDIGO};
+        border: 1px solid #1C355E;
         background-color: #FFFFFF;
     }}
     QLineEdit::placeholder {{ color: #94A3B8; }}
