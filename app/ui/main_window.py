@@ -158,7 +158,7 @@ class Sidebar(QFrame):
             self.setMinimumWidth(248)
             self.brand_box.show()
             for key, btn in self.buttons.items():
-                btn.setText(f"{_ICONS.get(key, '')}   {self._labels.get(key, key)}")
+                btn.setText(self._labels.get(key, key))
                 btn.setToolTip("")
             for i in range(self.layout().count()):
                 w = self.layout().itemAt(i).widget()
