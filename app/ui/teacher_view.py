@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QLineEdit, QDialog, QComboBox, QFormLayout, QDialogButtonBox,
-    QTabWidget, QTextEdit
+    QTabWidget, QTextEdit, QFrame
 )
 from PySide6.QtCore import Qt
 from app.database import get_session
@@ -33,11 +33,6 @@ class TeacherView(QWidget):
         top.addWidget(self.add_btn)
         layout.addLayout(top)
 
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search teacher by name, email, department...")
-        self.search.textChanged.connect(self.load)
-        layout.addWidget(self.search)
-
         btns = QHBoxLayout()
         self.edit_btn = QPushButton("Edit")
         self.edit_btn.setObjectName("SecondaryButton")
@@ -54,6 +49,17 @@ class TeacherView(QWidget):
         btns.addStretch()
         layout.addLayout(btns)
 
+        # Web Card: search + table inside one bordered card.
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 16, 20, 16)
+        card_layout.setSpacing(12)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search teachers...")
+        self.search.textChanged.connect(self.load)
+        card_layout.addWidget(self.search)
+
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["ID", "NAME", "EMAIL", "DEPARTMENT", "DESIGNATION", "STATUS"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -64,7 +70,8 @@ class TeacherView(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.table.setColumnWidth(0, 60)
         self.table.cellDoubleClicked.connect(lambda r,c: self.edit_teacher())
-        layout.addWidget(self.table)
+        card_layout.addWidget(self.table, 1)
+        layout.addWidget(card, 1)
 
     def refresh(self):
         self.load()
