@@ -94,6 +94,35 @@ class TimetableView(QWidget):
         self.completion_label = QLabel("")
         self.completion_label.setObjectName("SectionTitle")
         layout.addWidget(self.completion_label)
+        # Direct conflict display: odd vs even semester groups (no popups).
+        self.conflict_card = QFrame()
+        self.conflict_card.setObjectName("Card")
+        conflict_inner = QVBoxLayout(self.conflict_card)
+        conflict_inner.setContentsMargins(16, 12, 16, 12)
+        conflict_inner.setSpacing(8)
+        conflict_title = QLabel("Conflict Status — Odd / Even Semesters")
+        conflict_title.setObjectName("SectionTitle")
+        conflict_inner.addWidget(conflict_title)
+        cols = QHBoxLayout()
+        cols.setSpacing(12)
+        self.odd_box = QVBoxLayout()
+        odd_head = QLabel("Odd Semesters (1 · 3 · 5)")
+        odd_head.setObjectName("Muted")
+        self.odd_box.addWidget(odd_head)
+        self.odd_list = QLabel("")
+        self.odd_list.setWordWrap(True)
+        self.odd_box.addWidget(self.odd_list)
+        cols.addLayout(self.odd_box, 1)
+        self.even_box = QVBoxLayout()
+        even_head = QLabel("Even Semesters (2 · 4 · 6)")
+        even_head.setObjectName("Muted")
+        self.even_box.addWidget(even_head)
+        self.even_list = QLabel("")
+        self.even_list.setWordWrap(True)
+        self.even_box.addWidget(self.even_list)
+        cols.addLayout(self.even_box, 1)
+        conflict_inner.addLayout(cols)
+        layout.addWidget(self.conflict_card)
         self.conflict_notice = QLabel("")
         self.conflict_notice.setWordWrap(True)
         self.conflict_notice.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
@@ -120,6 +149,29 @@ class TimetableView(QWidget):
         self.format_preview.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.format_preview)
         self.load_semesters()
+
+    def _render_conflict_group(self, label, conflicts):
+        if not conflicts:
+            label.setText("No conflicts.")
+            label.setObjectName("BannerOk")
+        else:
+            lines = [c.get("message", "") for c in conflicts[:5]]
+            extra = f"\n(+{len(conflicts) - 5} more)" if len(conflicts) > 5 else ""
+            label.setText(f"{len(conflicts)} conflict(s):\n" + "\n".join(lines) + extra)
+            label.setObjectName("BannerErr")
+        try:
+            self.style().unpolish(label)
+            self.style().polish(label)
+        except Exception:
+            pass
+
+    def refresh_conflict_panel(self, session):
+        try:
+            groups = ConflictService.detect_group_conflicts(session)
+        except Exception:
+            groups = {"odd": [], "even": []}
+        self._render_conflict_group(self.odd_list, groups.get("odd", []))
+        self._render_conflict_group(self.even_list, groups.get("even", []))
 
     def show_conflict_notice(self, message):
         self.conflict_notice.setText(f"Blocked — scheduling conflict:\n{message}")
@@ -220,12 +272,52 @@ class TimetableView(QWidget):
     def generate_timetable(self):
         if not self._saved_format_path() and not self.choose_format_photo():
             return
+        if not self.current_semester_id:
+            QMessageBox.warning(self, "Generate", "Select a semester first.")
+            return
+        session = get_session()
+        try:
+            analysis = TimetableService.analyze_generation_need(session, self.current_semester_id)
+        finally:
+            session.close()
+        need = sum(a["remaining"] for a in analysis)
+        if need <= 0:
+            self.load_timetable()
+            QMessageBox.information(self, "Timetable Ready", "All required lectures are already scheduled. The saved format is applied to this timetable view.")
+            return
+        preview = "\n".join(
+            f"{a['subject'].code} ({a['subject'].subject_type}): "
+            f"{a['scheduled']}/{a['required']} scheduled, {a['remaining']} to place"
+            for a in analysis if a["remaining"] > 0)[:1200]
+        if QMessageBox.question(
+            self, "Auto-Generate Timetable",
+            f"Analysis of {self.sem_combo.currentText()} — {need} lecture(s) to place:\n\n{preview}\n\n"
+            "Existing entries stay fixed. Every placement passes the full conflict check. Continue?",
+            QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        session = get_session()
+        try:
+            result = TimetableService.generate_for_semester(session, self.current_semester_id)
+        finally:
+            session.close()
         self.load_timetable()
-        QMessageBox.information(
-            self,
-            "Timetable Ready",
-            "The saved format is applied to this timetable view. Add or edit lectures to complete the schedule."
-        )
+        placed = result.get("placed", 0)
+        unplaced = result.get("unplaced", [])
+        if result.get("error"):
+            QMessageBox.warning(self, "Generate", str(result["error"]))
+            return
+        if unplaced:
+            detail = "\n".join(f"{u['code']}: {u['remaining']} left — {u['reason']}" for u in unplaced[:8])
+            QMessageBox.information(self, "Timetable Generated",
+                                    f"Placed {placed} lecture(s).\n\nCould not place all:\n{detail}")
+        else:
+            try:
+                from app.ui.widgets import show_toast
+                show_toast(self, f"Placed {placed} lecture(s). Timetable complete.")
+            except Exception:
+                pass
+            QMessageBox.information(self, "Timetable Ready",
+                                    f"Placed {placed} lecture(s). The saved format is applied to this timetable view.")
 
     def on_semester_changed(self, idx):
         if idx < 0:
@@ -261,6 +353,7 @@ class TimetableView(QWidget):
             # Completion
             comp = ConflictService.calculate_timetable_completion(session, self.current_semester_id)
             self.completion_label.setText(f"{self.sem_combo.currentText()} — Required: {comp['required']}  Scheduled: {comp['scheduled']}  Remaining: {comp['remaining']}  Completion: {comp['completion_pct']}%")
+            self.refresh_conflict_panel(session)
             # Card grid setup
             times = [(s.start_time, s.end_time) for s in slots]
             # If slots empty, create default 8 rows
