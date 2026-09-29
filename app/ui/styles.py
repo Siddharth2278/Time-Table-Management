@@ -208,18 +208,18 @@ def _light_qss() -> str:
         background: transparent;
     }}
     QLabel#StatusPill {{
-        color: #047857;
+        color: #166534;
         font-weight: 700;
         font-size: 11.5px;
-        background: #ECFDF5;
-        border: 1px solid #A7F3D0;
+        background: #DCFCE7;
+        border: 1px solid #BBF7D0;
         border-radius: 14px;
         padding: 5px 12px;
     }}
     QPushButton#IconButton {{
         background: #F1F5F9;
-        border: 1px solid #E2E8F0;
-        border-radius: 8px;
+        border: 1px solid #DEDCD3;
+        border-radius: 2px;
         color: #334155;
         font-size: 15px;
         min-height: 32px;

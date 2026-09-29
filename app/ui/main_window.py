@@ -92,8 +92,8 @@ class Sidebar(QFrame):
     def __init__(self, on_select):
         super().__init__()
         self.setObjectName("Sidebar")
-        self.setFixedWidth(248)
-        self.setMinimumWidth(248)
+        self.setFixedWidth(260)
+        self.setMinimumWidth(260)
         self.on_select = on_select
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 10, 6, 10)
@@ -154,8 +154,8 @@ class Sidebar(QFrame):
                     w.hide()
             self.foot.hide()
         else:
-            self.setFixedWidth(248)
-            self.setMinimumWidth(248)
+            self.setFixedWidth(260)
+            self.setMinimumWidth(260)
             self.brand_box.show()
             for key, btn in self.buttons.items():
                 btn.setText(self._labels.get(key, key))
@@ -181,7 +181,7 @@ class Header(QFrame):
     def __init__(self, toggle_callback=None, export_callback=None):
         super().__init__()
         self.setObjectName("Header")
-        self.setFixedHeight(62)
+        self.setFixedHeight(64)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 8, 14, 8)
         layout.setSpacing(10)
