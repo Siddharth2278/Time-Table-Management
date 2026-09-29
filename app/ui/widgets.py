@@ -145,6 +145,25 @@ def pin_dialog_buttons(dialog):
         pass
 
 
+def style_dialog_buttons(box):
+    """Make a QDialogButtonBox's OK/Cancel unmissable.
+
+    OK becomes the prominent primary action (and default button);
+    Cancel becomes a secondary action. Wiring is untouched.
+    """
+    try:
+        from PySide6.QtWidgets import QDialogButtonBox
+        ok = box.button(QDialogButtonBox.Ok)
+        if ok is not None:
+            ok.setObjectName("PrimaryButton")
+            ok.setDefault(True)
+        cancel = box.button(QDialogButtonBox.Cancel)
+        if cancel is not None:
+            cancel.setObjectName("SecondaryButton")
+    except Exception:
+        pass
+
+
 def show_toast(parent, text: str, kind: str = "success", ms: int = 2600):
     """Small floating confirmation. Fire-and-forget; never blocks like QMessageBox."""
     try:
