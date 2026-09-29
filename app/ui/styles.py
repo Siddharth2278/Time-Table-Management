@@ -81,9 +81,9 @@ def _common() -> str:
 
     /* Page headings — theme-specific color set below, shared sizing here */
     QLabel#PageTitle {{
-        font-size: 22px;
-        font-weight: 800;
-        letter-spacing: -0.4px;
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: -0.5px;
     }}
     QLabel#PageSubtitle {{
         font-size: 12.5px;
@@ -94,9 +94,9 @@ def _common() -> str:
         font-weight: 700;
     }}
     QLabel#StatValue {{
-        font-size: 30px;
-        font-weight: 800;
-        letter-spacing: -0.6px;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.4px;
     }}
     QLabel#StatLabel {{
         font-size: 11px;
@@ -104,12 +104,12 @@ def _common() -> str:
         letter-spacing: 0.7px;
     }}
     QFrame#ContentCard {{
-        border: 2px solid {GRID_LINE};
+        border: 1px solid #DEDCD3;
         border-radius: 2px;
         padding: 14px;
     }}
     QFrame#StatCard {{
-        border: 2px solid {GRID_LINE};
+        border: 1px solid #DEDCD3;
         border-radius: 2px;
         padding: 12px;
     }}
@@ -235,11 +235,11 @@ def _light_qss() -> str:
     QLabel#StatLabel {{ color: #64748B; background: transparent; }}
     QFrame#ContentCard {{
         background-color: #FFFFFF;
-        border: 2px solid #DEDCD3;
+        border: 1px solid #DEDCD3;
     }}
     QFrame#StatCard {{
         background-color: #FFFFFF;
-        border: 2px solid #DEDCD3;
+        border: 1px solid #DEDCD3;
     }}
     QFrame#Card {{
         background-color: #FFFFFF;
