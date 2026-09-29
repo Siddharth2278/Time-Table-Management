@@ -98,6 +98,53 @@ _TOAST_COLORS = {
 }
 
 
+def pin_dialog_buttons(dialog):
+    """Keep a dialog's last row (OK/Cancel) always visible.
+
+    Moves every layout row except the final button row into a scroll area,
+    so on scaled displays / long forms the content scrolls instead of
+    pushing the action buttons out of the window. Validation and signals
+    are untouched.
+    """
+    from PySide6.QtWidgets import QScrollArea
+    layout = dialog.layout()
+    if layout is None or layout.count() < 2:
+        return
+    try:
+        scroll = QScrollArea(dialog)
+        scroll.setObjectName("DialogScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        body = QWidget()
+        inner = QVBoxLayout(body)
+        inner.setContentsMargins(0, 0, 0, 0)
+        try:
+            inner.setSpacing(layout.spacing())
+        except Exception:
+            pass
+        keep = layout.count() - 1
+        moved = [layout.takeAt(0) for _ in range(keep)]
+        for item in moved:
+            child = item.widget()
+            if child is not None:
+                inner.addWidget(child)
+                continue
+            child_layout = item.layout()
+            if child_layout is not None:
+                inner.addLayout(child_layout)
+        scroll.setWidget(body)
+        layout.insertWidget(0, scroll, 1)
+        try:
+            hint = dialog.sizeHint()
+            dialog.resize(max(dialog.width(), hint.width()),
+                          min(max(hint.height(), 240), 720))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def show_toast(parent, text: str, kind: str = "success", ms: int = 2600):
     """Small floating confirmation. Fire-and-forget; never blocks like QMessageBox."""
     try:
