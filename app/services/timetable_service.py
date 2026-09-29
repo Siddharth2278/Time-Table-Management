@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from app.models import TimetableEntry, Subject, Semester, Teacher, Room, WorkingDay
+from app.models import TimetableEntry, Subject, Semester, Teacher, Room, WorkingDay, TimeSlot
 from app.services.conflict_service import ConflictService, ConflictResult
 
 class TimetableService:
@@ -138,3 +138,124 @@ class TimetableService:
     @staticmethod
     def get_room_timetable(session: Session, room_id: int) -> List[TimetableEntry]:
         return session.query(TimetableEntry).join(WorkingDay, TimetableEntry.day_id == WorkingDay.id).filter(TimetableEntry.room_id == room_id).order_by(WorkingDay.sort_order, TimetableEntry.start_time).all()
+
+    @staticmethod
+    def analyze_generation_need(session: Session, semester_id: int) -> List[Dict[str, Any]]:
+        """Per-subject weekly analysis: required vs scheduled vs remaining.
+
+        Existing entries are treated as fixed; only the remaining count is
+        ever scheduled. Read-only.
+        """
+        analysis = []
+        subjects = session.query(Subject).filter(
+            Subject.semester_id == semester_id).order_by(Subject.code).all()
+        for s in subjects:
+            try:
+                required = max(0, int(s.required_lectures_per_week or 0))
+            except (TypeError, ValueError):
+                required = 0
+            scheduled = session.query(TimetableEntry).filter(
+                TimetableEntry.semester_id == semester_id,
+                TimetableEntry.subject_id == s.id).count()
+            analysis.append({
+                "subject": s,
+                "required": required,
+                "scheduled": scheduled,
+                "remaining": max(0, required - scheduled),
+            })
+        return analysis
+
+    @staticmethod
+    def generate_for_semester(session: Session, semester_id: int) -> Dict[str, Any]:
+        """Offline auto-scheduler: fill unscheduled weekly lectures.
+
+        Greedy and deterministic. Every placement goes through create_entry,
+        so the full ConflictService validation (teacher / semester / room /
+        availability / break / subject limit) applies — a generated
+        timetable can never contain a conflict the manual flow would block.
+        Returns {"placed": int, "unplaced": [...], "analysis": [...] buckets}.
+        """
+        analysis = TimetableService.analyze_generation_need(session, semester_id)
+        days = session.query(WorkingDay).filter(
+            WorkingDay.is_enabled == True).order_by(WorkingDay.sort_order).all()
+        slots = session.query(TimeSlot).filter(
+            TimeSlot.is_enabled == True, TimeSlot.is_break == False
+        ).order_by(TimeSlot.start_time).all()
+        teachers = session.query(Teacher).filter(
+            Teacher.status == "Active").order_by(Teacher.name).all()
+        rooms = session.query(Room).filter(
+            Room.status == "Available").order_by(Room.name).all()
+        result: Dict[str, Any] = {"placed": 0, "unplaced": [], "analysis": analysis}
+        if not days:
+            result["error"] = "No working days enabled."
+            return result
+        if not slots:
+            result["error"] = "No teaching slots defined."
+            return result
+        if not teachers:
+            result["error"] = "No active teachers."
+            return result
+        if not rooms:
+            result["error"] = "No available rooms."
+            return result
+        teacher_ids = [t.id for t in teachers]
+        # Subjects with the most remaining lectures first (packs tighter).
+        todo = sorted(
+            [a for a in analysis if a["remaining"] > 0],
+            key=lambda a: (-a["remaining"], a["subject"].code or ""))
+        for item in todo:
+            subject = item["subject"]
+            teacher_order = []
+            if subject.teacher_id in teacher_ids:
+                teacher_order.append(subject.teacher_id)
+            teacher_order += [t for t in teacher_ids if t not in teacher_order]
+            room_order = []
+            room_ids = [r.id for r in rooms]
+            if subject.room_id in room_ids:
+                room_order.append(subject.room_id)
+            room_order += [r.id for r in rooms
+                           if r.id not in room_order
+                           and (r.type == subject.room_requirement or not subject.room_requirement)]
+            room_order += [r.id for r in rooms if r.id not in room_order]
+            need = item["remaining"]
+            placed_here = 0
+            last_reason = "No free day/slot combination."
+            while need > 0:
+                done = False
+                for day in days:
+                    if done:
+                        break
+                    for slot in slots:
+                        if done:
+                            break
+                        for teacher_id in teacher_order:
+                            if done:
+                                break
+                            for room_id in room_order:
+                                ok, out = TimetableService.create_entry(
+                                    session, semester_id, subject.id, teacher_id, room_id,
+                                    day.id, slot.start_time, slot.end_time,
+                                    lecture_type=subject.subject_type or "Theory")
+                                if ok:
+                                    placed_here += 1
+                                    need -= 1
+                                    done = True
+                                    break
+                                try:
+                                    msgs = [c.message for c in out if getattr(c, "has_conflict", False)]
+                                    if msgs:
+                                        last_reason = msgs[0]
+                                except (TypeError, AttributeError):
+                                    pass
+                if not done:
+                    break
+            result["placed"] += placed_here
+            left = item["remaining"] - placed_here
+            if left > 0:
+                result["unplaced"].append({
+                    "code": subject.code,
+                    "name": subject.name,
+                    "remaining": left,
+                    "reason": last_reason,
+                })
+        return result
