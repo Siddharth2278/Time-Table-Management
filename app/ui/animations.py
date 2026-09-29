@@ -17,18 +17,14 @@ def _alive(widget) -> bool:
 
 
 def fade_in(widget, duration: int = 230, delay: int = 0):
-    """Fade a widget in from transparent to opaque. Safe on deleted widgets."""
+    """Fade a widget in from transparent to opaque. Safe on deleted widgets.
+
+    Effect is installed lazily at start (not upfront) and skipped entirely
+    when the widget is no longer visible — stale opacity effects on hidden
+    QStackedWidget pages are what ghost-paint over the current page.
+    """
     if not _alive(widget):
         return None
-    effect = QGraphicsOpacityEffect(widget)
-    effect.setOpacity(0.0)
-    widget.setGraphicsEffect(effect)
-    anim = QPropertyAnimation(effect, b"opacity", widget)
-    anim.setDuration(max(60, duration))
-    anim.setStartValue(0.0)
-    anim.setEndValue(1.0)
-    anim.setEasingCurve(QEasingCurve.OutCubic)
-    widget.setProperty("_fade_anim", anim)
 
     def _finish():
         try:
@@ -37,25 +33,34 @@ def fade_in(widget, duration: int = 230, delay: int = 0):
         except Exception:
             pass
 
-    try:
-        anim.finished.connect(_finish)
-    except Exception:
-        pass
-
     def _start():
         try:
-            if _alive(widget) and _alive(effect):
-                anim.start()
-            else:
-                _finish()
+            if not _alive(widget):
+                return
+            if not widget.isVisible():
+                return
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(0.0)
+            widget.setGraphicsEffect(effect)
+            anim = QPropertyAnimation(effect, b"opacity", widget)
+            anim.setDuration(max(60, duration))
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.OutCubic)
+            widget.setProperty("_fade_anim", anim)
+            try:
+                anim.finished.connect(_finish)
+            except Exception:
+                pass
+            anim.start()
         except Exception:
-            pass
+            _finish()
 
     if delay > 0:
         QTimer.singleShot(delay, _start)
     else:
         _start()
-    return anim
+    return None
 
 
 def stagger_in(widgets, base_delay: int = 30, step: int = 70, duration: int = 230):
