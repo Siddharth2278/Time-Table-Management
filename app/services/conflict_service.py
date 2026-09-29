@@ -308,3 +308,27 @@ class ConflictService:
                     rname = a.room.name if getattr(a, "room", None) else f"Room {a.room_id}"
                     conflicts.append({"type": "room", "entries": (a, b), "message": f"Room {rname} double-booked on {a_day} {a.start_time}-{a.end_time} vs {b.start_time}-{b.end_time}"})
         return conflicts
+
+    @staticmethod
+    def detect_group_conflicts(session: Session) -> Dict[str, List[Dict[str, Any]]]:
+        """Group existing conflicts by term parity for direct display.
+
+        Odd semesters (1, 3, 5) run in one term, even semesters (2, 4, 6)
+        in the other. A conflict touching any odd-semester entry is listed
+        under "odd"; touching any even entry under "even". Cross-term
+        clashes therefore appear in both groups. Read-only: the strict
+        save-time validation is unchanged.
+        """
+        groups: Dict[str, List[Dict[str, Any]]] = {"odd": [], "even": []}
+        for conflict in ConflictService.detect_all_conflicts(session):
+            sem_ids = set()
+            for entry in conflict.get("entries", ()):
+                try:
+                    sem_ids.add(int(entry.semester_id))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            if any(s % 2 == 1 for s in sem_ids):
+                groups["odd"].append(conflict)
+            if any(s % 2 == 0 for s in sem_ids):
+                groups["even"].append(conflict)
+        return groups
