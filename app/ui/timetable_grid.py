@@ -98,9 +98,9 @@ class LectureCard(QFrame):
         self._dark_mode = False
         self._apply_style()
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(10)
-        shadow.setOffset(0, 2)
-        shadow.setColor(QColor(15, 23, 42, 28))
+        shadow.setBlurRadius(6)
+        shadow.setOffset(0, 1)
+        shadow.setColor(QColor(17, 17, 16, 14))
         self.setGraphicsEffect(shadow)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(9, 7, 7, 7)
@@ -133,8 +133,8 @@ class LectureCard(QFrame):
             border = "#0F172A"
         self._base_style = (
             f"QFrame#LectureCard {{ background: {bg}; border: 2px solid {border}; "
-            f"border-left: 6px solid {accent}; border-radius: 2px; padding: 6px; }} "
-            f"QFrame#LectureCard:hover {{ border: 2px solid {accent}; border-left: 6px solid {accent}; }}"
+            f"border-left: 4px solid {accent}; border-radius: 2px; padding: 6px; }} "
+            f"QFrame#LectureCard:hover {{ border: 2px solid {accent}; border-left: 4px solid {accent}; }}"
         )
         self.setStyleSheet(self._base_style)
         if hasattr(self, "subject_label"):
