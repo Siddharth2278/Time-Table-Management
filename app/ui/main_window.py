@@ -11,6 +11,7 @@ from app.database import get_session, init_db
 from app.models import Setting
 from app.ui.styles import get_theme_qss
 from app.ui.icons import icon, nav_icon
+from app.ui.widgets import set_switch_theme
 from app.ui.dashboard import DashboardView
 from app.ui.timetable_view import TimetableView
 from app.ui.teacher_view import TeacherView
@@ -347,14 +348,12 @@ class MainWindow(QMainWindow):
             pass
 
     def _show_only(self, idx: int):
+        # QStackedWidget alone guarantees exactly one visible page.
+        # (Manual show()/hide() of layout-managed pages wedges the new
+        # page at sizeHint width instead of full stack width.)
         for _, i in self.key_to_index.items():
-            w = self.stack.widget(i)
             try:
-                if i == idx:
-                    w.show()
-                else:
-                    w.hide()
-                self._clear_effects(w)
+                self._clear_effects(self.stack.widget(i))
             except Exception:
                 pass
         self.stack.setCurrentIndex(idx)
@@ -432,6 +431,7 @@ class MainWindow(QMainWindow):
                 pass
         self.setStyleSheet(get_theme_qss(theme))
         dark = theme != "light"
+        set_switch_theme(dark)
         try:
             self.sidebar.set_theme_icons(dark)
             self.header.set_menu_icon(dark)
