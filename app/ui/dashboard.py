@@ -1,18 +1,20 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, QProgressBar, QFrame
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, QFrame, QPushButton,
+)
+from PySide6.QtCore import Qt, Signal
 from app.database import get_session
 from app.models import Teacher, Subject, Room, TimetableEntry, Semester
 from app.services.conflict_service import ConflictService
 
 
 class StatCard(QFrame):
-    """Web-style metric card: muted icon square plus mono value. Flow unchanged."""
+    """Web-style metric card: muted icon square plus mono value."""
 
-    ICON_BG = ("#E0E7FF", "#D1FAE5", "#FEF3C7", "#FCE7F3", "#DBEAFE", "#F3F1EA")
-    ICON_FG = ("#1C355E", "#065F46", "#92400E", "#9A2C2C", "#1C355E", "#57534E")
-    ICON_TXT = ("T", "S", "C", "L", "S", "U")
+    ICON_BG = ("#E0E7FF", "#D1FAE5", "#FEF3C7", "#FCE7F3")
+    ICON_FG = ("#1C355E", "#065F46", "#92400E", "#9A2C2C")
+    ICON_TXT = ("T", "S", "R", "Se")
 
-    def __init__(self, title, value, gradient=None, icon_index: int = 0):
+    def __init__(self, title, value, icon_index: int = 0):
         super().__init__()
         self.setObjectName("StatCard")
         outer = QHBoxLayout(self)
@@ -46,17 +48,9 @@ class StatCard(QFrame):
         count_up(self.val_label, self._target, delay=delay)
 
 
-CARD_GRADIENTS = [
-    ("#4F46E5", "#8B5CF6"),
-    ("#0EA5E9", "#6366F1"),
-    ("#059669", "#34D399"),
-    ("#D97706", "#F59E0B"),
-    ("#7C3AED", "#D946EF"),
-    ("#DC2626", "#F97316"),
-]
-
-
 class DashboardView(QWidget):
+    navigate = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.main_layout = QVBoxLayout(self)
@@ -65,7 +59,7 @@ class DashboardView(QWidget):
         title = QLabel("Dashboard")
         title.setObjectName("PageTitle")
         self.main_layout.addWidget(title)
-        sub = QLabel("Overview of timetable, resources and completion status")
+        sub = QLabel("Timetable health, recent scheduling activity and shortcuts.")
         sub.setObjectName("PageSubtitle")
         self.main_layout.addWidget(sub)
 
@@ -76,57 +70,117 @@ class DashboardView(QWidget):
         self.stats_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.addWidget(self.stats_container)
 
-        self.sem_label = QLabel("Semester Completion")
-        self.sem_label.setObjectName("SectionTitle")
-        self.main_layout.addWidget(self.sem_label)
-        self.sem_container = QFrame()
-        self.sem_container.setObjectName("ContentCard")
-        self.sem_layout = QVBoxLayout(self.sem_container)
-        self.sem_layout.setContentsMargins(16, 16, 16, 16)
-        self.sem_layout.setSpacing(12)
-        self.main_layout.addWidget(self.sem_container)
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        self.recent_card = QFrame()
+        self.recent_card.setObjectName("ContentCard")
+        recent_outer = QVBoxLayout(self.recent_card)
+        recent_outer.setContentsMargins(16, 16, 16, 16)
+        recent_outer.setSpacing(8)
+        recent_title = QLabel("Recent Activity")
+        recent_title.setObjectName("SectionTitle")
+        recent_outer.addWidget(recent_title)
+        self.recent_body = QVBoxLayout()
+        self.recent_body.setSpacing(6)
+        recent_outer.addLayout(self.recent_body)
+        row.addWidget(self.recent_card, 2)
 
-        # Inline schedule-health banner: conflicts are reported HERE directly,
-        # no separate Conflicts page.
+        links_card = QFrame()
+        links_card.setObjectName("ContentCard")
+        links_outer = QVBoxLayout(links_card)
+        links_outer.setContentsMargins(16, 16, 16, 16)
+        links_outer.setSpacing(8)
+        links_title = QLabel("Quick Links")
+        links_title.setObjectName("SectionTitle")
+        links_outer.addWidget(links_title)
+        for label, key in [
+            ("Open Timetable", "Timetable"),
+            ("Add Teacher", "Teachers"),
+            ("Add Subject", "Subjects"),
+            ("Settings", "Settings"),
+        ]:
+            btn = QPushButton(f"{label}  \u2192")
+            btn.setObjectName("SecondaryButton")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda checked=False, k=key: self.navigate.emit(k))
+            links_outer.addWidget(btn)
+        links_outer.addStretch()
+        row.addWidget(links_card, 1)
+        self.main_layout.addLayout(row)
+
         self.health_label = QLabel("")
         self.health_label.setWordWrap(True)
         self.main_layout.addWidget(self.health_label)
         self.main_layout.addStretch()
 
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
     def refresh(self):
-        while self.stats_layout.count():
-            item = self.stats_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-        while self.sem_layout.count():
-            item = self.sem_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
+        self._clear_layout(self.stats_layout)
+        self._clear_layout(self.recent_body)
         session = get_session()
         try:
             total_teachers = session.query(Teacher).count()
             total_subjects = session.query(Subject).count()
-            total_rooms = session.query(Room).filter(Room.type == "Classroom").count()
-            total_labs = session.query(Room).filter(Room.type == "Laboratory").count()
-            total_lectures = session.query(TimetableEntry).count()
-            sems = session.query(Semester).order_by(Semester.id).all()
-            required_total = 0
-            for s in sems:
-                subs = session.query(Subject).filter(Subject.semester_id == s.id).all()
-                for x in subs:
-                    try:
-                        v = int(x.required_lectures_per_week) if x.required_lectures_per_week is not None else 0
-                        required_total += max(0, v)
-                    except (TypeError, ValueError):
-                        continue
-            unscheduled = 0
-            for s in sems:
-                comp_s = ConflictService.calculate_timetable_completion(session, s.id)
-                unscheduled += max(0, comp_s["required"] - comp_s["scheduled"])
+            total_rooms = session.query(Room).count()
+            total_sems = session.query(Semester).count()
+            cards = [
+                ("Total Teachers", total_teachers),
+                ("Total Subjects", total_subjects),
+                ("Rooms", total_rooms),
+                ("Active Semesters", total_sems),
+            ]
+            made = []
+            for idx, (title, val) in enumerate(cards):
+                card = StatCard(title, val, icon_index=idx)
+                self.stats_layout.addWidget(card, 0, idx)
+                made.append(card)
+            for i, card in enumerate(made):
+                card.play(delay=40 + i * 50)
+
+            entries = (
+                session.query(TimetableEntry)
+                .order_by(TimetableEntry.id.desc())
+                .limit(6)
+                .all()
+            )
+            if not entries:
+                empty = QLabel(
+                    "No lectures scheduled yet. Open Timetable and assign your first class."
+                )
+                empty.setWordWrap(True)
+                empty.setObjectName("PageSubtitle")
+                empty.setAlignment(Qt.AlignCenter)
+                empty.setStyleSheet(
+                    "padding: 24px; border: 1px dashed #DEDCD3; border-radius: 2px;"
+                )
+                self.recent_body.addWidget(empty)
+            else:
+                for e in entries:
+                    line = QHBoxLayout()
+                    left = QLabel(
+                        f"Sem {e.semester_id} \u2022 Day {e.day_id}  "
+                        f"{e.start_time}\u2013{e.end_time}"
+                    )
+                    left.setStyleSheet("font-family: 'JetBrains Mono', monospace; font-weight: 600;")
+                    right = QLabel(
+                        f"Sub {e.subject_id} \u2022 T{e.teacher_id} \u2022 R{e.room_id}"
+                    )
+                    right.setObjectName("PageSubtitle")
+                    right.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    wrap = QWidget()
+                    wrap.setStyleSheet("background: transparent; border: none;")
+                    line.addWidget(left, 1)
+                    line.addWidget(right, 1)
+                    wrap.setLayout(line)
+                    self.recent_body.addWidget(wrap)
+
             conflicts = ConflictService.detect_all_conflicts(session)
-            # Include availability/break violations so banner is not falsely green
             try:
                 from app.models import TeacherAvailability, RoomAvailability, TimeSlot
                 from app.utils.helpers import time_to_minutes as _t2m
@@ -135,11 +189,13 @@ class DashboardView(QWidget):
                 _tas = session.query(TeacherAvailability).filter(TeacherAvailability.is_unavailable == True).all()
                 _ras = session.query(RoomAvailability).filter(RoomAvailability.is_unavailable == True).all()
                 _brks = session.query(TimeSlot).filter(TimeSlot.is_break == True, TimeSlot.is_enabled == True).all()
+
                 def _ov(a, b, c, d):
                     try:
                         return _t2m(a) < _t2m(d) and _t2m(b) > _t2m(c)
                     except (ValueError, AttributeError, TypeError):
                         return False
+
                 for e in _entries:
                     for ta in _tas:
                         if ta.teacher_id == e.teacher_id and ta.day_id == e.day_id and _ov(ta.start_time, ta.end_time, e.start_time, e.end_time):
@@ -157,58 +213,21 @@ class DashboardView(QWidget):
             except Exception:
                 total_conflicts = len(conflicts)
                 extra = 0
-            cards = [
-                ("Total Teachers", total_teachers),
-                ("Total Subjects", total_subjects),
-                ("Classrooms", total_rooms),
-                ("Laboratories", total_labs),
-                ("Scheduled Lectures", total_lectures),
-                ("Unscheduled", unscheduled),
-            ]
-            made = []
-            for idx, (title, val) in enumerate(cards):
-                card = StatCard(title, val, CARD_GRADIENTS[idx % len(CARD_GRADIENTS)], icon_index=idx)
-                self.stats_layout.addWidget(card, idx // 3, idx % 3)
-                made.append(card)
-            from app.ui.animations import stagger_in
-            stagger_in(made)
-            for i, card in enumerate(made):
-                card.play(delay=60 + i * 70)
-            for sem in sems:
-                comp = ConflictService.calculate_timetable_completion(session, sem.id)
-                row = QHBoxLayout()
-                row.setSpacing(10)
-                name = QLabel(sem.name)
-                name.setMinimumWidth(130)
-                name.setStyleSheet("font-weight: 700; font-size: 13px; background: transparent; border: none;")
-                bar = QProgressBar()
-                bar.setMaximum(100)
-                bar.setValue(int(comp["completion_pct"]))
-                bar.setFormat(f"{comp['scheduled']}/{comp['required']}  {comp['completion_pct']}%")
-                pct_label = QLabel(f"{comp['completion_pct']}%")
-                pct_label.setMinimumWidth(52)
-                pct_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                pct_label.setStyleSheet("font-weight: 800; font-size: 13px; background: transparent; border: none;")
-                row.addWidget(name)
-                row.addWidget(bar, 1)
-                row.addWidget(pct_label)
-                container = QWidget()
-                container.setStyleSheet("background: transparent; border: none;")
-                container.setLayout(row)
-                self.sem_layout.addWidget(container)
+
             if total_conflicts:
-                # Direct message: list first few conflicts inline.
                 first = conflicts[0].get("message", "") if conflicts else "Availability/break violation detected."
                 extra_txt = f" (+{total_conflicts - 1} more)" if total_conflicts > 1 else ""
                 self.health_label.setText(
-                    f"{total_conflicts} conflict(s) detected ({len(conflicts)} scheduling + {extra} availability/break). Fix them in Timetable \u2014 errors appear directly when you save.\n{first}{extra_txt}"
+                    f"{total_conflicts} conflict(s) detected. Fix them in Timetable — errors appear when you save.\n{first}{extra_txt}"
                 )
                 self.health_label.setStyleSheet(
                     "color: #991B1B; font-weight: 600; font-size: 12.5px; background: #FEF2F2; "
                     "border: 1px solid #FECACA; border-radius: 10px; padding: 12px;"
                 )
             else:
-                self.health_label.setText("Schedule is clean. No teacher, semester, room, availability or break overlaps detected.")
+                self.health_label.setText(
+                    "Schedule is clean. No teacher, semester, room, availability or break overlaps detected."
+                )
                 self.health_label.setStyleSheet(
                     "color: #065F46; font-weight: 600; font-size: 12.5px; background: #ECFDF5; "
                     "border: 1px solid #A7F3D0; border-radius: 10px; padding: 12px;"
