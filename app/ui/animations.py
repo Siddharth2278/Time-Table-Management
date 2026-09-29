@@ -4,8 +4,7 @@ Everything here is parented to the animated widget so no manual
 lifetime management is needed. Animations are short and subtle:
 the app should feel alive, never slow.
 """
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QTimer
-from PySide6.QtWidgets import QGraphicsOpacityEffect
+from PySide6.QtCore import QTimer
 
 
 def _alive(widget) -> bool:
@@ -17,61 +16,20 @@ def _alive(widget) -> bool:
 
 
 def fade_in(widget, duration: int = 230, delay: int = 0):
-    """Fade a widget in from transparent to opaque. Safe on deleted widgets.
+    """No-op: web parity without Qt opacity effects.
 
-    Effect is installed lazily at start (not upfront) and skipped entirely
-    when the widget is no longer visible — stale opacity effects on hidden
-    QStackedWidget pages are what ghost-paint over the current page.
+    Web animates the page container with CSS fadeIn. Per-widget
+    QGraphicsOpacityEffect on QStackedWidget pages ghost-paints hidden
+    pages over the current one (delayed timers re-install effects after
+    navigation), so desktop pages render fully opaque instead.
+    Kept as a no-op so existing callers are untouched.
     """
-    if not _alive(widget):
-        return None
-
-    def _finish():
-        try:
-            if _alive(widget):
-                widget.setGraphicsEffect(None)
-        except Exception:
-            pass
-
-    def _start():
-        try:
-            if not _alive(widget):
-                return
-            if not widget.isVisible():
-                return
-            effect = QGraphicsOpacityEffect(widget)
-            effect.setOpacity(0.0)
-            widget.setGraphicsEffect(effect)
-            anim = QPropertyAnimation(effect, b"opacity", widget)
-            anim.setDuration(max(60, duration))
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.OutCubic)
-            widget.setProperty("_fade_anim", anim)
-            try:
-                anim.finished.connect(_finish)
-            except Exception:
-                pass
-            anim.start()
-        except Exception:
-            _finish()
-
-    if delay > 0:
-        QTimer.singleShot(delay, _start)
-    else:
-        _start()
     return None
 
 
 def stagger_in(widgets, base_delay: int = 30, step: int = 70, duration: int = 230):
-    """Fade a row of widgets in one after another."""
-    for i, w in enumerate(widgets):
-        try:
-            if not _alive(w):
-                continue
-            fade_in(w, duration=duration, delay=base_delay + i * step)
-        except Exception:
-            continue
+    """No-op companion to fade_in — pages render fully opaque, never ghost."""
+    return None
 
 
 def count_up(label, target, duration: int = 650, delay: int = 0):
