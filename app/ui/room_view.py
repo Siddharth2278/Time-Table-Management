@@ -1,71 +1,100 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QLineEdit, QComboBox, QDialog, QVBoxLayout as VBox, QTableWidget as Tbl, QDialogButtonBox
+    QHeaderView, QMessageBox, QLineEdit, QComboBox, QDialog, QVBoxLayout as VBox,
+    QTableWidget as Tbl, QDialogButtonBox, QFrame
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
+from functools import partial
 from app.database import get_session
 from app.models import Room, TimetableEntry
 from app.ui.dialogs import RoomDialog
 from app.services.timetable_service import TimetableService
+from app.ui.icons import icon
+from app.ui.widgets import page_header, show_toast
+
+STATUS_OK = ("#166534", "#DCFCE7")
+STATUS_BAD = ("#991B1B", "#FEE2E2")
+
 
 class RoomView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(10)
-        top = QHBoxLayout()
-        title = QLabel("Rooms & Laboratories")
-        title.setObjectName("PageTitle")
-        top.addWidget(title)
-        top.addStretch()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search rooms/labs...")
-        self.search.setMinimumWidth(260)
-        self.search.textChanged.connect(self.load)
-        top.addWidget(self.search)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(12)
+
+        self.add_btn = QPushButton(" Add Room / Lab")
+        self.add_btn.setObjectName("PrimaryButton")
+        self.add_btn.setIcon(icon("plus", "#FFFFFF", 16))
+        self.add_btn.setCursor(Qt.PointingHandCursor)
+        self.add_btn.clicked.connect(lambda: self.add_room())
+        layout.addWidget(page_header(
+            "Rooms & Labs", "Classrooms, laboratories and halls with capacity.", self.add_btn))
+
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(8)
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("Muted")
+        toolbar.addWidget(self.count_label)
+        toolbar.addStretch()
         self.type_filter = QComboBox()
         self.type_filter.addItems(["All Types", "Classroom", "Laboratory", "Seminar Hall"])
+        self.type_filter.setMinimumWidth(160)
         self.type_filter.currentTextChanged.connect(self.load)
-        top.addWidget(self.type_filter)
-        layout.addLayout(top)
-
-        btns = QHBoxLayout()
-        self.add_btn = QPushButton("＋ Add Room/Lab")
-        self.add_btn.setObjectName("PrimaryButton")
-        self.add_btn.clicked.connect(self.add_room)
-        btns.addWidget(self.add_btn)
-        self.edit_btn = QPushButton("Edit")
-        self.edit_btn.setObjectName("SecondaryButton")
-        self.edit_btn.clicked.connect(self.edit_room)
-        btns.addWidget(self.edit_btn)
-        self.del_btn = QPushButton("Delete")
-        self.del_btn.setObjectName("DangerButton")
-        self.del_btn.clicked.connect(self.delete_room)
-        btns.addWidget(self.del_btn)
+        toolbar.addWidget(self.type_filter)
         self.view_btn = QPushButton("View Timetable")
         self.view_btn.setObjectName("SecondaryButton")
-        self.view_btn.clicked.connect(self.view_timetable)
-        btns.addWidget(self.view_btn)
-        btns.addStretch()
-        layout.addLayout(btns)
+        self.view_btn.setCursor(Qt.PointingHandCursor)
+        self.view_btn.clicked.connect(lambda: self.view_timetable())
+        toolbar.addWidget(self.view_btn)
+        layout.addLayout(toolbar)
+
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 16, 20, 16)
+        card_layout.setSpacing(12)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search rooms...")
+        self.search.textChanged.connect(self.load)
+        card_layout.addWidget(self.search)
 
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["ID", "NAME", "ROOM NO", "TYPE", "STATUS"])
+        self.table.setHorizontalHeaderLabels(["NAME", "ROOM NO", "TYPE", "STATUS", "ACTIONS"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.setColumnWidth(0, 50)
-        # Alternating row colors use QSS var() values
         self.table.verticalHeader().setVisible(False)
-        self.table.cellDoubleClicked.connect(lambda r,c: self.edit_room())
-        layout.addWidget(self.table)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
+        self.table.setColumnWidth(4, 96)
+        self.table.cellDoubleClicked.connect(
+            lambda r, c: self.edit_room(self._id_at_row(r)))
+        card_layout.addWidget(self.table)
+
+        self.empty_label = QLabel("No rooms yet. Click “Add Room / Lab” to add your first room.")
+        self.empty_label.setObjectName("EmptyState")
+        self.empty_label.setWordWrap(True)
+        card_layout.addWidget(self.empty_label)
+        layout.addWidget(card)
 
     def refresh(self):
         self.load()
+
+    def _id_at_row(self, row):
+        item = self.table.item(row, 0)
+        if item is None:
+            return None
+        try:
+            return int(item.data(Qt.UserRole))
+        except (TypeError, ValueError):
+            return None
+
+    def _selected_id(self):
+        return self._id_at_row(self.table.currentRow())
 
     def load(self):
         session = get_session()
@@ -77,38 +106,58 @@ class RoomView(QWidget):
                 rooms = [r for r in rooms if r.type == ftype]
             if search:
                 rooms = [r for r in rooms if search in (r.name or "").lower() or search in (r.room_number or "").lower()]
+            self.table.setRowCount(0)
             self.table.setRowCount(len(rooms))
+            mono = QFont("Cascadia Code")
             for r, room in enumerate(rooms):
-                self.table.setItem(r, 0, QTableWidgetItem(str(room.id)))
-                self.table.setItem(r, 1, QTableWidgetItem(room.name))
-                self.table.setItem(r, 2, QTableWidgetItem(room.room_number))
-                self.table.setItem(r, 3, QTableWidgetItem(room.type))
+                self.table.setItem(r, 0, QTableWidgetItem(room.name))
+                num_item = QTableWidgetItem(room.room_number)
+                num_item.setFont(mono)
+                self.table.setItem(r, 1, num_item)
+                self.table.setItem(r, 2, QTableWidgetItem(room.type))
                 status_item = QTableWidgetItem(room.status)
-                from PySide6.QtGui import QColor as _QC
+                status_item.setTextAlignment(Qt.AlignCenter)
+                font = QFont()
+                font.setBold(True)
+                status_item.setFont(font)
                 if room.status == "Available":
-                    status_item.setForeground(_QC("#059669"))
+                    status_item.setForeground(QColor(STATUS_OK[0]))
+                    status_item.setBackground(QColor(STATUS_OK[1]))
                 else:
-                    status_item.setForeground(_QC("#DC2626"))
-                self.table.setItem(r, 4, status_item)
-                for c in range(5):
-                    it = self.table.item(r, c)
-                    if it:
-                        it.setData(Qt.UserRole, room.id)
+                    status_item.setForeground(QColor(STATUS_BAD[0]))
+                    status_item.setBackground(QColor(STATUS_BAD[1]))
+                self.table.setItem(r, 3, status_item)
+                for c in range(4):
+                    self.table.item(r, c).setData(Qt.UserRole, room.id)
+                cell = QWidget()
+                row_layout = QHBoxLayout(cell)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(4)
+                edit = QPushButton()
+                edit.setObjectName("RowButton")
+                edit.setIcon(icon("pencil", "#8A94A0", 16))
+                edit.setToolTip("Edit")
+                edit.setCursor(Qt.PointingHandCursor)
+                edit.clicked.connect(partial(self.edit_room, room.id))
+                row_layout.addWidget(edit)
+                delete = QPushButton()
+                delete.setObjectName("RowButtonDanger")
+                delete.setIcon(icon("trash", "#D6544C", 16))
+                delete.setToolTip("Delete")
+                delete.setCursor(Qt.PointingHandCursor)
+                delete.clicked.connect(partial(self.delete_room, room.id))
+                row_layout.addWidget(delete)
+                row_layout.addStretch()
+                self.table.setCellWidget(r, 4, cell)
+            self.count_label.setText(f"{len(rooms)} room{'s' if len(rooms) != 1 else ''}")
+            self.empty_label.setVisible(len(rooms) == 0)
         finally:
             session.close()
-
-    def _selected_id(self):
-        row = self.table.currentRow()
-        if row < 0:
-            return None
-        item = self.table.item(row, 0)
-        return int(item.text()) if item else None
 
     def add_room(self):
         dlg = RoomDialog(self)
         if dlg.exec():
             data = dlg.get_data()
-            # Duplicate exact name check — Lab 1 A vs Lab 1 B allowed, same name not
             session = get_session()
             try:
                 dup = session.query(Room).filter(Room.name.ilike(data["name"].strip())).first()
@@ -119,7 +168,7 @@ class RoomView(QWidget):
                 room = Room(**data)
                 session.add(room)
                 session.commit()
-                QMessageBox.information(self, "Success", "Room/Lab added.")
+                show_toast(self, "Room / lab added.")
                 self.load()
             except Exception as e:
                 session.rollback()
@@ -127,17 +176,18 @@ class RoomView(QWidget):
             finally:
                 try:
                     session.close()
-                except:
+                except Exception:
                     pass
 
-    def edit_room(self):
-        rid = self._selected_id()
+    def edit_room(self, rid=None):
+        if rid is None:
+            rid = self._selected_id()
         if not rid:
             QMessageBox.warning(self, "Select", "Please select a room to edit.")
             return
         session = get_session()
         try:
-            room = session.query(Room).filter(Room.id==rid).first()
+            room = session.query(Room).filter(Room.id == rid).first()
             if not room:
                 return
             dlg = RoomDialog(self, room)
@@ -145,7 +195,6 @@ class RoomView(QWidget):
             session.close()
             if dlg.exec():
                 data = dlg.get_data()
-                # Duplicate check on edit — exclude self
                 chk = get_session()
                 try:
                     dup2 = chk.query(Room).filter(Room.name.ilike(data["name"].strip()), Room.id != rid).first()
@@ -154,18 +203,18 @@ class RoomView(QWidget):
                         chk.close()
                         return
                     chk.close()
-                except:
+                except Exception:
                     try:
                         chk.close()
-                    except:
+                    except Exception:
                         pass
                 s2 = get_session()
                 try:
-                    r2 = s2.query(Room).filter(Room.id==rid).first()
-                    for k,v in data.items():
+                    r2 = s2.query(Room).filter(Room.id == rid).first()
+                    for k, v in data.items():
                         setattr(r2, k, v)
                     s2.commit()
-                    QMessageBox.information(self, "Success", "Room/Lab updated.")
+                    show_toast(self, "Room / lab updated.")
                     self.load()
                 except Exception as e:
                     s2.rollback()
@@ -175,12 +224,13 @@ class RoomView(QWidget):
         except Exception as e:
             try:
                 session.close()
-            except:
+            except Exception:
                 pass
             QMessageBox.critical(self, "Error", str(e))
 
-    def delete_room(self):
-        rid = self._selected_id()
+    def delete_room(self, rid=None):
+        if rid is None:
+            rid = self._selected_id()
         if not rid:
             QMessageBox.warning(self, "Select", "Please select a room to delete.")
             return
@@ -188,15 +238,15 @@ class RoomView(QWidget):
             return
         session = get_session()
         try:
-            cnt = session.query(TimetableEntry).filter(TimetableEntry.room_id==rid).count()
+            cnt = session.query(TimetableEntry).filter(TimetableEntry.room_id == rid).count()
             if cnt > 0:
                 QMessageBox.critical(self, "Cannot Delete", f"This room has {cnt} scheduled lecture(s). Delete those lectures first.")
                 return
-            room = session.query(Room).filter(Room.id==rid).first()
+            room = session.query(Room).filter(Room.id == rid).first()
             if room:
                 session.delete(room)
                 session.commit()
-                QMessageBox.information(self, "Deleted", "Room/Lab deleted.")
+                show_toast(self, "Room / lab deleted.")
                 self.load()
         except Exception as e:
             session.rollback()
@@ -204,26 +254,28 @@ class RoomView(QWidget):
         finally:
             session.close()
 
-    def view_timetable(self):
-        rid = self._selected_id()
+    def view_timetable(self, rid=None):
+        if rid is None:
+            rid = self._selected_id()
         if not rid:
             QMessageBox.warning(self, "Select", "Please select a room to view timetable.")
             return
         session = get_session()
         try:
-            room = session.query(Room).filter(Room.id==rid).first()
+            room = session.query(Room).filter(Room.id == rid).first()
             entries = TimetableService.get_room_timetable(session, rid)
             dlg = QDialog(self)
             dlg.setWindowTitle(f"Room Timetable - {room.name if room else ''}")
             dlg.setMinimumSize(720, 400)
             layout = VBox(dlg)
             info = QLabel(f"Room: {room.name if room else ''} ({room.room_number if room else ''}) | Lectures: {len(entries)}")
-            info.setStyleSheet("font-weight: 600;")
+            info.setObjectName("SectionTitle")
             layout.addWidget(info)
             tbl = Tbl(len(entries), 5)
-            tbl.setHorizontalHeaderLabels(["Day", "Time", "Semester", "Subject", "Teacher"])
+            tbl.setHorizontalHeaderLabels(["DAY", "TIME", "SEMESTER", "SUBJECT", "TEACHER"])
             tbl.setEditTriggers(QTableWidget.NoEditTriggers)
             tbl.setAlternatingRowColors(True)
+            tbl.verticalHeader().setVisible(False)
             tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             for r, e in enumerate(sorted(entries, key=lambda x: (x.day.sort_order if x.day else 0, x.start_time))):
                 tbl.setItem(r, 0, QTableWidgetItem(e.day.name if e.day else ""))
