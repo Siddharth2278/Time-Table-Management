@@ -1,72 +1,85 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QLineEdit, QComboBox
+    QHeaderView, QMessageBox, QLineEdit, QComboBox, QFrame
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
+from functools import partial
 from app.database import get_session
 from app.models import Subject, Semester, Teacher, TimetableEntry
 from app.ui.dialogs import SubjectDialog
-from app.services.conflict_service import ConflictService
+from app.ui.icons import icon
+from app.ui.widgets import page_header, show_toast
+
+TYPE_COLORS = ("#3B4D63", "#E4EAF2")
+
 
 class SubjectView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(10)
-        top = QHBoxLayout()
-        title = QLabel("Subjects")
-        title.setObjectName("PageTitle")
-        top.addWidget(title)
-        top.addStretch()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search by code, name...")
-        self.search.setMinimumWidth(260)
-        self.search.textChanged.connect(self.load)
-        top.addWidget(self.search)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(12)
+
+        self.add_btn = QPushButton(" Add Subject")
+        self.add_btn.setObjectName("PrimaryButton")
+        self.add_btn.setIcon(icon("plus", "#FFFFFF", 16))
+        self.add_btn.setCursor(Qt.PointingHandCursor)
+        self.add_btn.clicked.connect(lambda: self.add_subject())
+        layout.addWidget(page_header(
+            "Subjects", "Courses linked to semesters, teachers and rooms.", self.add_btn))
+
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(8)
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("Muted")
+        toolbar.addWidget(self.count_label)
+        toolbar.addStretch()
         self.sem_filter = QComboBox()
         self.sem_filter.addItem("All Semesters", None)
-        # sems populated in refresh
+        self.sem_filter.setMinimumWidth(170)
         self.sem_filter.currentIndexChanged.connect(self.load)
-        top.addWidget(self.sem_filter)
-        layout.addLayout(top)
+        toolbar.addWidget(self.sem_filter)
+        layout.addLayout(toolbar)
 
-        btns = QHBoxLayout()
-        self.add_btn = QPushButton("＋ Add Subject")
-        self.add_btn.setObjectName("PrimaryButton")
-        self.add_btn.clicked.connect(self.add_subject)
-        btns.addWidget(self.add_btn)
-        self.edit_btn = QPushButton("Edit")
-        self.edit_btn.setObjectName("SecondaryButton")
-        self.edit_btn.clicked.connect(self.edit_subject)
-        btns.addWidget(self.edit_btn)
-        self.del_btn = QPushButton("Delete")
-        self.del_btn.setObjectName("DangerButton")
-        self.del_btn.clicked.connect(self.delete_subject)
-        btns.addWidget(self.del_btn)
-        btns.addStretch()
-        layout.addLayout(btns)
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 16, 20, 16)
+        card_layout.setSpacing(12)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search subjects...")
+        self.search.textChanged.connect(self.load)
+        card_layout.addWidget(self.search)
 
-        self.table = QTableWidget(0, 8)
-        self.table.setHorizontalHeaderLabels(["ID", "Code", "Name", "Semester", "Type", "Req/Wk", "Duration", "Teacher"])
+        self.table = QTableWidget(0, 7)
+        self.table.setHorizontalHeaderLabels(
+            ["CODE", "NAME", "SEMESTER", "TYPE", "REQ/WK", "TEACHER", "ACTIONS"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.setColumnWidth(0, 50)
-        self.table.cellDoubleClicked.connect(lambda r,c: self.edit_subject())
-        layout.addWidget(self.table)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Fixed)
+        self.table.setColumnWidth(6, 96)
+        self.table.cellDoubleClicked.connect(
+            lambda r, c: self.edit_subject(self._id_at_row(r)))
+        card_layout.addWidget(self.table)
 
-        # Info about weekly requirement
+        self.empty_label = QLabel("No subjects yet. Click “Add Subject” to add your first course.")
+        self.empty_label.setObjectName("EmptyState")
+        self.empty_label.setWordWrap(True)
+        card_layout.addWidget(self.empty_label)
+
         self.info = QLabel("")
-        self.info.setObjectName("PageSubtitle")
+        self.info.setObjectName("Muted")
         self.info.setWordWrap(True)
-        layout.addWidget(self.info)
+        card_layout.addWidget(self.info)
+        layout.addWidget(card)
 
     def refresh(self):
-        # Populate sem filter
         session = get_session()
         try:
             sems = session.query(Semester).order_by(Semester.id).all()
@@ -85,6 +98,18 @@ class SubjectView(QWidget):
             session.close()
         self.load()
 
+    def _id_at_row(self, row):
+        item = self.table.item(row, 0)
+        if item is None:
+            return None
+        try:
+            return int(item.data(Qt.UserRole))
+        except (TypeError, ValueError):
+            return None
+
+    def _selected_id(self):
+        return self._id_at_row(self.table.currentRow())
+
     def load(self):
         session = get_session()
         try:
@@ -96,68 +121,84 @@ class SubjectView(QWidget):
                 subjects = [s for s in subjects if s.semester_id == sem_filter]
             if search:
                 subjects = [s for s in subjects if search in (s.code or "").lower() or search in (s.name or "").lower()]
+            self.table.setRowCount(0)
             self.table.setRowCount(len(subjects))
+            mono = QFont("Cascadia Code")
             for r, s in enumerate(subjects):
-                # For weekly tracking, calculate scheduled/required
-                scheduled = session.query(TimetableEntry).filter(TimetableEntry.subject_id==s.id).count()
-                self.table.setItem(r, 0, QTableWidgetItem(str(s.id)))
-                self.table.setItem(r, 1, QTableWidgetItem(s.code))
-                self.table.setItem(r, 2, QTableWidgetItem(s.name))
+                scheduled = session.query(TimetableEntry).filter(TimetableEntry.subject_id == s.id).count()
+                code_item = QTableWidgetItem(s.code)
+                code_item.setFont(mono)
+                self.table.setItem(r, 0, code_item)
+                self.table.setItem(r, 1, QTableWidgetItem(s.name))
                 sem_name = s.semester.name if s.semester else f"Sem {s.semester_id}"
-                self.table.setItem(r, 3, QTableWidgetItem(sem_name))
-                self.table.setItem(r, 4, QTableWidgetItem(s.subject_type))
+                self.table.setItem(r, 2, QTableWidgetItem(sem_name))
+                type_item = QTableWidgetItem(s.subject_type or "")
+                type_item.setTextAlignment(Qt.AlignCenter)
+                type_item.setForeground(QColor(TYPE_COLORS[0]))
+                type_item.setBackground(QColor(TYPE_COLORS[1]))
+                self.table.setItem(r, 3, type_item)
                 req_item = QTableWidgetItem(f"{scheduled}/{s.required_lectures_per_week}")
-                from PySide6.QtGui import QColor as _QC
+                req_item.setFont(mono)
+                req_item.setTextAlignment(Qt.AlignCenter)
                 if scheduled < s.required_lectures_per_week:
-                    req_item.setForeground(_QC("#D97706"))
+                    req_item.setForeground(QColor("#D97706"))
                 elif scheduled == s.required_lectures_per_week:
-                    req_item.setForeground(_QC("#059669"))
+                    req_item.setForeground(QColor("#22B07D"))
                 else:
-                    req_item.setForeground(_QC("#DC2626"))
-                self.table.setItem(r, 5, QTableWidgetItem(f"{scheduled}/{s.required_lectures_per_week}"))
-                self.table.setItem(r, 6, QTableWidgetItem(f"{s.lecture_duration} mins"))
+                    req_item.setForeground(QColor("#E05D52"))
+                self.table.setItem(r, 4, req_item)
                 teacher_name = s.assigned_teacher.name if s.assigned_teacher else "-"
-                self.table.setItem(r, 7, QTableWidgetItem(teacher_name))
-                for c in range(8):
-                    it = self.table.item(r, c)
-                    it.setData(Qt.UserRole, s.id)
-            # Update info
+                self.table.setItem(r, 5, QTableWidgetItem(teacher_name))
+                for c in range(6):
+                    self.table.item(r, c).setData(Qt.UserRole, s.id)
+                cell = QWidget()
+                row_layout = QHBoxLayout(cell)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(4)
+                edit = QPushButton()
+                edit.setObjectName("RowButton")
+                edit.setIcon(icon("pencil", "#8A94A0", 16))
+                edit.setToolTip("Edit")
+                edit.setCursor(Qt.PointingHandCursor)
+                edit.clicked.connect(partial(self.edit_subject, s.id))
+                row_layout.addWidget(edit)
+                delete = QPushButton()
+                delete.setObjectName("RowButtonDanger")
+                delete.setIcon(icon("trash", "#D6544C", 16))
+                delete.setToolTip("Delete")
+                delete.setCursor(Qt.PointingHandCursor)
+                delete.clicked.connect(partial(self.delete_subject, s.id))
+                row_layout.addWidget(delete)
+                row_layout.addStretch()
+                self.table.setCellWidget(r, 6, cell)
             total_req = sum(s.required_lectures_per_week for s in subjects)
-            total_sched = sum(session.query(TimetableEntry).filter(TimetableEntry.subject_id==s.id).count() for s in subjects)
-            self.info.setText(f"Showing {len(subjects)} subjects | Total Required: {total_req} | Scheduled: {total_sched} | Remaining: {max(0, total_req-total_sched)}")
+            total_sched = sum(session.query(TimetableEntry).filter(TimetableEntry.subject_id == s.id).count() for s in subjects)
+            self.count_label.setText(
+                f"{len(subjects)} subject{'s' if len(subjects) != 1 else ''}")
+            self.info.setText(
+                f"Total Required: {total_req}  •  Scheduled: {total_sched}  •  Remaining: {max(0, total_req - total_sched)}")
+            self.empty_label.setVisible(len(subjects) == 0)
         finally:
             session.close()
-
-    def _selected_id(self):
-        row = self.table.currentRow()
-        if row < 0:
-            return None
-        item = self.table.item(row, 0)
-        if item:
-            return int(item.text())
-        return None
 
     def add_subject(self):
         session = get_session()
         try:
             dlg = SubjectDialog(self, session=session)
-            # dialog will close session on close, so need to handle carefully
-            # Instead create without passing session
             dlg2 = SubjectDialog(self)
             session.close()
             if dlg2.exec():
                 data = dlg2.get_data()
                 s2 = get_session()
                 try:
-                    # Check duplicate code
-                    exists = s2.query(Subject).filter(Subject.code==data["code"]).first()
+                    exists = s2.query(Subject).filter(Subject.code == data["code"]).first()
                     if exists:
                         QMessageBox.critical(self, "Error", f"Subject code {data['code']} already exists.")
                         return
                     sub = Subject(**data)
                     s2.add(sub)
                     s2.commit()
-                    QMessageBox.information(self, "Success", "Subject added.")
+                    show_toast(self, "Subject added.")
                     self.load()
                 except Exception as e:
                     s2.rollback()
@@ -167,26 +208,26 @@ class SubjectView(QWidget):
         except Exception as e:
             try:
                 session.close()
-            except:
+            except Exception:
                 pass
             QMessageBox.critical(self, "Error", str(e))
         finally:
             try:
                 dlg.session.close()
-            except:
+            except Exception:
                 pass
 
-    def edit_subject(self):
-        sid = self._selected_id()
+    def edit_subject(self, sid=None):
+        if sid is None:
+            sid = self._selected_id()
         if not sid:
             QMessageBox.warning(self, "Select", "Please select a subject to edit.")
             return
         session = get_session()
         try:
-            subj = session.query(Subject).filter(Subject.id==sid).first()
+            subj = session.query(Subject).filter(Subject.id == sid).first()
             if not subj:
                 return
-            # Need to keep data, close session before dialog
             session.expunge(subj)
             session.close()
             dlg = SubjectDialog(self, subject=subj)
@@ -194,16 +235,15 @@ class SubjectView(QWidget):
                 data = dlg.get_data()
                 s2 = get_session()
                 try:
-                    # Check code duplicate if changed
-                    exists = s2.query(Subject).filter(Subject.code==data["code"], Subject.id!=sid).first()
+                    exists = s2.query(Subject).filter(Subject.code == data["code"], Subject.id != sid).first()
                     if exists:
                         QMessageBox.critical(self, "Error", f"Subject code {data['code']} already exists.")
                         return
-                    sub2 = s2.query(Subject).filter(Subject.id==sid).first()
-                    for k,v in data.items():
+                    sub2 = s2.query(Subject).filter(Subject.id == sid).first()
+                    for k, v in data.items():
                         setattr(sub2, k, v)
                     s2.commit()
-                    QMessageBox.information(self, "Success", "Subject updated.")
+                    show_toast(self, "Subject updated.")
                     self.load()
                 except Exception as e:
                     s2.rollback()
@@ -215,11 +255,12 @@ class SubjectView(QWidget):
         finally:
             try:
                 session.close()
-            except:
+            except Exception:
                 pass
 
-    def delete_subject(self):
-        sid = self._selected_id()
+    def delete_subject(self, sid=None):
+        if sid is None:
+            sid = self._selected_id()
         if not sid:
             QMessageBox.warning(self, "Select", "Please select a subject to delete.")
             return
@@ -227,15 +268,15 @@ class SubjectView(QWidget):
             return
         session = get_session()
         try:
-            cnt = session.query(TimetableEntry).filter(TimetableEntry.subject_id==sid).count()
+            cnt = session.query(TimetableEntry).filter(TimetableEntry.subject_id == sid).count()
             if cnt > 0:
                 QMessageBox.critical(self, "Cannot Delete", f"This subject has {cnt} scheduled lecture(s). Delete those lectures first.")
                 return
-            sub = session.query(Subject).filter(Subject.id==sid).first()
+            sub = session.query(Subject).filter(Subject.id == sid).first()
             if sub:
                 session.delete(sub)
                 session.commit()
-                QMessageBox.information(self, "Deleted", "Subject deleted.")
+                show_toast(self, "Subject deleted.")
                 self.load()
         except Exception as e:
             session.rollback()
