@@ -278,25 +278,25 @@ def _light_qss() -> str:
         color: #FFFFFF;
     }}
     QPushButton#DangerButton:hover {{ background-color: #7C2323; }}
-    /* Tables — precise borders, mobile touch rows */
+    /* Tables — web ui.tsx: border #DEDCD3, header #F3F1EA, row hover #FAF9F6, cell #1C355E/5 */
     QTableWidget {{
         background-color: #FFFFFF;
-        alternate-background-color: #F8FAFC;
-        gridline-color: {GRID_LINE};
+        alternate-background-color: #FAF9F6;
+        gridline-color: #DEDCD3;
         border: 1px solid #DEDCD3;
         border-radius: 2px;
-        selection-background-color: #DBEAFE;
-        selection-color: #111110;
+        selection-background-color: #EAEFF5;
+        selection-color: #1C355E;
         color: #111110;
         font-size: 13px;
     }}
     QTableWidget::item {{
         padding: 12px 8px;
         color: #111110;
-        border-bottom: 1px solid {GRID_LINE};
+        border-bottom: 1px solid #DEDCD3;
     }}
     QTableWidget::item:selected {{
-        background-color: #DBEAFE;
+        background-color: #EAEFF5;
         color: #1C355E;
         font-weight: 600;
     }}
