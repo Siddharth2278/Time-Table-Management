@@ -70,13 +70,24 @@ class Switch(QCheckBox):
             painter.setBrush(QColor("#FFFFFF" if enabled else "#8A94A0"))
             painter.setPen(Qt.NoPen)
             painter.drawEllipse(knob_x, y + 3, knob_d, knob_d)
-            # Label text to the right of the track.
+            # Label text to the right of the track, in the themed ink color
+            # (a hardcoded white is invisible on light surfaces).
             if self.text():
-                painter.setPen(QColor("#F4F7FA" if enabled else "#8A94A0"))
+                painter.setPen(QColor("#F4F7FA" if _SWITCH_DARK else "#1E293B")
+                               if enabled else QColor("#8A94A0"))
                 painter.drawText(track_w + 10, 0, self.width() - track_w - 10, self.height(),
                                  Qt.AlignLeft | Qt.AlignVCenter, self.text())
         finally:
             painter.end()
+
+
+_SWITCH_DARK = True
+
+
+def set_switch_theme(dark: bool):
+    """Tell Switch widgets which theme is active (QSS colors are invisible to paint code)."""
+    global _SWITCH_DARK
+    _SWITCH_DARK = bool(dark)
 
 
 _TOAST_COLORS = {
