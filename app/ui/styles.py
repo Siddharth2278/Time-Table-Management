@@ -481,7 +481,7 @@ def _dark_qss() -> str:
     QPushButton#IconButton {{
         background: #1A2540;
         border: 1px solid #2A3A5C;
-        border-radius: 8px;
+        border-radius: 2px;
         color: #E2E8F0;
         font-size: 15px;
         min-height: 32px;
@@ -503,12 +503,12 @@ def _dark_qss() -> str:
     QFrame#Card {{
         background-color: #141F38;
         border: 1px solid #22304D;
-        border-radius: 14px;
+        border-radius: 2px;
         padding: 14px;
     }}
     QPushButton {{
-        min-height: 34px;
-        border-radius: 8px;
+        min-height: 40px;
+        border-radius: 2px;
         padding: 7px 14px;
         font-weight: 600;
         font-size: 13px;
@@ -530,17 +530,17 @@ def _dark_qss() -> str:
         color: #FFFFFF;
     }}
     QPushButton#DangerButton {{
-        background-color: #DC2626;
-        border: 1px solid #991B1B;
+        background-color: #9A2C2C;
+        border: none;
         color: #FFFFFF;
     }}
-    QPushButton#DangerButton:hover {{ background-color: #B91C1C; }}
+    QPushButton#DangerButton:hover {{ background-color: #7C2323; }}
     QTableWidget {{
         background-color: #141F38;
         alternate-background-color: #182645;
         gridline-color: #22304D;
         border: 1px solid #22304D;
-        border-radius: 12px;
+        border-radius: 2px;
         selection-background-color: {INDIGO};
         selection-color: #FFFFFF;
         color: #E2E8F0;
@@ -571,8 +571,8 @@ def _dark_qss() -> str:
     }}
     QLineEdit, QComboBox, QSpinBox, QTimeEdit, QTextEdit {{
         background-color: #1A2540;
-        border: 1.5px solid #2E3E63;
-        border-radius: 8px;
+        border: 1px solid #2E3E63;
+        border-radius: 2px;
         padding: 8px 12px;
         font-size: 13px;
         color: #F1F5F9;
@@ -602,7 +602,7 @@ def _dark_qss() -> str:
     QGroupBox {{
         background-color: #141F38;
         border: 1px solid #22304D;
-        border-radius: 12px;
+        border-radius: 2px;
         margin-top: 16px;
         padding: 16px;
         padding-top: 22px;
@@ -616,12 +616,12 @@ def _dark_qss() -> str:
         padding: 4px 12px;
         background-color: {INDIGO};
         color: #FFFFFF;
-        border-radius: 6px;
+        border-radius: 2px;
         font-size: 12px;
     }}
     QProgressBar {{
         border: none;
-        border-radius: 8px;
+        border-radius: 2px;
         text-align: center;
         background-color: #22304D;
         height: 20px;
@@ -631,19 +631,19 @@ def _dark_qss() -> str:
     }}
     QProgressBar::chunk {{
         background-color: #6366F1;
-        border-radius: 8px;
+        border-radius: 2px;
     }}
     QTabWidget::pane {{
         border: 1px solid #22304D;
         background: #141F38;
-        border-radius: 12px;
+        border-radius: 2px;
         top: -1px;
     }}
     QTabBar::tab {{
         padding: 10px 18px;
         background: #141F38;
         border: 1px solid #22304D;
-        border-radius: 8px 8px 0 0;
+        border-radius: 2px 2px 0 0;
         margin-right: 4px;
         color: #94A3B8;
         font-weight: 600;
