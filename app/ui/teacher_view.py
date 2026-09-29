@@ -11,7 +11,7 @@ from app.models import Teacher, TimetableEntry
 from app.services.timetable_service import TimetableService
 from app.ui.dialogs import TeacherDialog
 from app.ui.icons import icon
-from app.ui.widgets import page_header, show_toast
+from app.ui.widgets import page_header, show_toast, style_dialog_buttons
 
 STATUS_OK = ("#166534", "#DCFCE7")
 STATUS_BAD = ("#991B1B", "#FEE2E2")
@@ -263,6 +263,7 @@ class TeacherView(QWidget):
             btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
             btns.accepted.connect(dlg.accept)
             btns.rejected.connect(dlg.reject)
+            style_dialog_buttons(btns)
             layout.addWidget(btns)
             dlg.exec()
         finally:
