@@ -247,37 +247,37 @@ def _light_qss() -> str:
         border-radius: 2px;
         padding: 14px;
     }}
-    /* Buttons — sharp institutional */
+    /* Buttons — web ui.tsx: min-h 40px, rounded-sm, primary #1C355E, danger #9A2C2C */
     QPushButton {{
-        min-height: 44px;
+        min-height: 40px;
         border-radius: 2px;
         padding: 7px 14px;
         font-weight: 600;
         font-size: 13px;
     }}
     QPushButton#PrimaryButton {{
-        background-color: {INDIGO};
-        border: 2px solid {INDIGO_HOVER};
+        background-color: #1C355E;
+        border: none;
         color: #FFFFFF;
     }}
-    QPushButton#PrimaryButton:hover {{ background-color: {INDIGO_HOVER}; }}
-    QPushButton#PrimaryButton:pressed {{ background-color: #3730A3; }}
+    QPushButton#PrimaryButton:hover {{ background-color: #16294A; }}
+    QPushButton#PrimaryButton:pressed {{ background-color: #16294A; }}
     QPushButton#SecondaryButton {{
         background-color: #FFFFFF;
-        border: 1px solid #CBD5E1;
-        color: #1E293B;
+        border: 1px solid #DEDCD3;
+        color: #111110;
     }}
     QPushButton#SecondaryButton:hover {{
-        background-color: {INDIGO_SOFT};
-        border-color: {INDIGO};
-        color: {INDIGO_HOVER};
+        background-color: #F5F5F5;
+        border-color: #DEDCD3;
+        color: #111110;
     }}
     QPushButton#DangerButton {{
-        background-color: {CRIMSON};
-        border: 2px solid {CRIMSON_DARK};
+        background-color: #9A2C2C;
+        border: none;
         color: #FFFFFF;
     }}
-    QPushButton#DangerButton:hover {{ background-color: {CRIMSON_DARK}; }}
+    QPushButton#DangerButton:hover {{ background-color: #7C2323; }}
     /* Tables — precise borders, mobile touch rows */
     QTableWidget {{
         background-color: #FFFFFF;
