@@ -285,6 +285,7 @@ def _dark() -> str:
     QTabBar::tab:selected { color: #F4F7FA; border-bottom: 2px solid #5B8CFF; }
     QDialog { background-color: #11161D; border: 1px solid #27313D; }
     QDialog QLabel { color: #F4F7FA; }
+    QScrollArea#DialogScroll { border: none; background: transparent; }
     QMessageBox { background-color: #11161D; }
     QMessageBox QLabel { color: #F4F7FA; font-size: 13px; }
     QMessageBox QPushButton { min-width: 86px; }
@@ -517,6 +518,7 @@ def _light() -> str:
     QTabBar::tab:selected { color: #111110; border-bottom: 2px solid #1C355E; }
     QDialog { background-color: #FFFFFF; border: 1px solid #DEDCD3; }
     QDialog QLabel { color: #1E293B; }
+    QScrollArea#DialogScroll { border: none; background: transparent; }
     QMessageBox { background-color: #FFFFFF; }
     QMessageBox QLabel { color: #111110; font-size: 13px; }
     QMessageBox QPushButton { min-width: 86px; }
