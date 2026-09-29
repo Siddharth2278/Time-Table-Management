@@ -4,52 +4,47 @@ from PySide6.QtWidgets import (
     QTabWidget, QTextEdit, QFrame
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
+from functools import partial
 from app.database import get_session
 from app.models import Teacher, TimetableEntry
 from app.services.timetable_service import TimetableService
 from app.ui.dialogs import TeacherDialog
+from app.ui.icons import icon
+from app.ui.widgets import page_header, show_toast
+
+STATUS_OK = ("#166534", "#DCFCE7")
+STATUS_BAD = ("#991B1B", "#FEE2E2")
+
 
 class TeacherView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(10)
-        top = QHBoxLayout()
-        title_col = QVBoxLayout()
-        title_col.setContentsMargins(0, 0, 0, 0)
-        title_col.setSpacing(1)
-        title = QLabel("Teachers")
-        title.setObjectName("PageTitle")
-        title_col.addWidget(title)
-        sub = QLabel("Manage faculty and availability.")
-        sub.setObjectName("PageSubtitle")
-        title_col.addWidget(sub)
-        top.addLayout(title_col)
-        top.addStretch()
-        self.add_btn = QPushButton("＋ Add Teacher")
-        self.add_btn.setObjectName("PrimaryButton")
-        self.add_btn.clicked.connect(self.add_teacher)
-        top.addWidget(self.add_btn)
-        layout.addLayout(top)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(12)
 
-        btns = QHBoxLayout()
-        self.edit_btn = QPushButton("Edit")
-        self.edit_btn.setObjectName("SecondaryButton")
-        self.edit_btn.clicked.connect(self.edit_teacher)
-        btns.addWidget(self.edit_btn)
-        self.del_btn = QPushButton("Delete")
-        self.del_btn.setObjectName("DangerButton")
-        self.del_btn.clicked.connect(self.delete_teacher)
-        btns.addWidget(self.del_btn)
+        self.add_btn = QPushButton(" Add Teacher")
+        self.add_btn.setObjectName("PrimaryButton")
+        self.add_btn.setIcon(icon("plus", "#FFFFFF", 16))
+        self.add_btn.setCursor(Qt.PointingHandCursor)
+        self.add_btn.clicked.connect(lambda: self.add_teacher())
+        layout.addWidget(page_header(
+            "Teachers", "Manage faculty and availability.", self.add_btn))
+
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("Muted")
+        toolbar.addWidget(self.count_label)
+        toolbar.addStretch()
         self.view_btn = QPushButton("View Timetable")
         self.view_btn.setObjectName("SecondaryButton")
-        self.view_btn.clicked.connect(self.view_timetable)
-        btns.addWidget(self.view_btn)
-        btns.addStretch()
-        layout.addLayout(btns)
+        self.view_btn.setCursor(Qt.PointingHandCursor)
+        self.view_btn.clicked.connect(lambda: self.view_timetable())
+        toolbar.addWidget(self.view_btn)
+        layout.addLayout(toolbar)
 
-        # Web Card: search + table inside one bordered card.
         card = QFrame()
         card.setObjectName("Card")
         card_layout = QVBoxLayout(card)
@@ -61,20 +56,51 @@ class TeacherView(QWidget):
         card_layout.addWidget(self.search)
 
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["ID", "NAME", "EMAIL", "DEPARTMENT", "DESIGNATION", "STATUS"])
+        self.table.setHorizontalHeaderLabels(
+            ["NAME", "EMAIL", "DEPARTMENT", "DESIGNATION", "STATUS", "ACTIONS"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.setColumnWidth(0, 60)
-        self.table.cellDoubleClicked.connect(lambda r,c: self.edit_teacher())
-        card_layout.addWidget(self.table, 1)
-        layout.addWidget(card, 1)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
+        self.table.setColumnWidth(5, 96)
+        self.table.cellDoubleClicked.connect(
+            lambda r, c: self.edit_teacher(self._id_at_row(r)))
+        card_layout.addWidget(self.table)
+
+        self.empty_label = QLabel("No teachers yet. Click “Add Teacher” to add your first faculty member.")
+        self.empty_label.setObjectName("EmptyState")
+        self.empty_label.setWordWrap(True)
+        card_layout.addWidget(self.empty_label)
+        layout.addWidget(card)
 
     def refresh(self):
         self.load()
+
+    def _id_at_row(self, row):
+        item = self.table.item(row, 0)
+        if item is None:
+            return None
+        try:
+            return int(item.data(Qt.UserRole))
+        except (TypeError, ValueError):
+            return None
+
+    def _selected_id(self):
+        return self._id_at_row(self.table.currentRow())
+
+    @staticmethod
+    def _pill(text, colors):
+        item = QTableWidgetItem(text)
+        item.setTextAlignment(Qt.AlignCenter)
+        font = QFont()
+        font.setBold(True)
+        item.setFont(font)
+        item.setForeground(QColor(colors[0]))
+        item.setBackground(QColor(colors[1]))
+        return item
 
     def load(self):
         session = get_session()
@@ -84,44 +110,45 @@ class TeacherView(QWidget):
             teachers = q.all()
             if search:
                 teachers = [t for t in teachers if search in (t.name or "").lower() or search in (t.email or "").lower() or search in (t.department or "").lower()]
+            self.table.setRowCount(0)
             self.table.setRowCount(len(teachers))
+            mono = QFont("Cascadia Code")
             for r, t in enumerate(teachers):
-                self.table.setItem(r, 0, QTableWidgetItem(str(t.id)))
-                self.table.setItem(r, 1, QTableWidgetItem(t.name))
-                from PySide6.QtGui import QFont as _QF
+                self.table.setItem(r, 0, QTableWidgetItem(t.name))
                 email_item = QTableWidgetItem(t.email or "")
-                email_item.setFont(_QF("JetBrains Mono", 9))
-                self.table.setItem(r, 2, email_item)
-                self.table.setItem(r, 3, QTableWidgetItem(t.department or ""))
-                self.table.setItem(r, 4, QTableWidgetItem(t.designation or ""))
-                # Web-style status pill: same strings, pill colors only.
-                status_item = QTableWidgetItem(t.status or "")
-                status_item.setTextAlignment(Qt.AlignCenter)
-                _bf = _QF()
-                _bf.setBold(True)
-                status_item.setFont(_bf)
-                from PySide6.QtGui import QColor as _QC
-                if t.status == "Active":
-                    status_item.setForeground(_QC("#166534"))
-                    status_item.setBackground(_QC("#DCFCE7"))
-                else:
-                    status_item.setForeground(_QC("#991B1B"))
-                    status_item.setBackground(_QC("#FEE2E2"))
-                self.table.setItem(r, 5, status_item)
-                for c in range(6):
-                    it = self.table.item(r, c)
-                    it.setData(Qt.UserRole, t.id)
+                email_item.setFont(mono)
+                self.table.setItem(r, 1, email_item)
+                self.table.setItem(r, 2, QTableWidgetItem(t.department or ""))
+                self.table.setItem(r, 3, QTableWidgetItem(t.designation or ""))
+                self.table.setItem(
+                    r, 4, self._pill(t.status or "", STATUS_OK if t.status == "Active" else STATUS_BAD))
+                for c in range(5):
+                    self.table.item(r, c).setData(Qt.UserRole, t.id)
+                cell = QWidget()
+                row_layout = QHBoxLayout(cell)
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(4)
+                edit = QPushButton()
+                edit.setObjectName("RowButton")
+                edit.setIcon(icon("pencil", "#8A94A0", 16))
+                edit.setToolTip("Edit")
+                edit.setCursor(Qt.PointingHandCursor)
+                edit.clicked.connect(partial(self.edit_teacher, t.id))
+                row_layout.addWidget(edit)
+                delete = QPushButton()
+                delete.setObjectName("RowButtonDanger")
+                delete.setIcon(icon("trash", "#D6544C", 16))
+                delete.setToolTip("Delete")
+                delete.setCursor(Qt.PointingHandCursor)
+                delete.clicked.connect(partial(self.delete_teacher, t.id))
+                row_layout.addWidget(delete)
+                row_layout.addStretch()
+                self.table.setCellWidget(r, 5, cell)
+            self.count_label.setText(
+                f"{len(teachers)} teacher{'s' if len(teachers) != 1 else ''}")
+            self.empty_label.setVisible(len(teachers) == 0)
         finally:
             session.close()
-
-    def _selected_id(self):
-        row = self.table.currentRow()
-        if row < 0:
-            return None
-        item = self.table.item(row, 0)
-        if item:
-            return int(item.text())
-        return None
 
     def add_teacher(self):
         dlg = TeacherDialog(self)
@@ -132,7 +159,7 @@ class TeacherView(QWidget):
                 t = Teacher(**data)
                 session.add(t)
                 session.commit()
-                QMessageBox.information(self, "Success", "Teacher added.")
+                show_toast(self, "Teacher added.")
                 self.load()
             except Exception as e:
                 session.rollback()
@@ -140,49 +167,46 @@ class TeacherView(QWidget):
             finally:
                 session.close()
 
-    def edit_teacher(self):
-        tid = self._selected_id()
+    def edit_teacher(self, tid=None):
+        if tid is None:
+            tid = self._selected_id()
         if not tid:
             QMessageBox.warning(self, "Select", "Please select a teacher to edit.")
             return
         session = get_session()
         try:
-            teacher = session.query(Teacher).filter(Teacher.id==tid).first()
+            teacher = session.query(Teacher).filter(Teacher.id == tid).first()
             if not teacher:
                 return
-            # need to detach before dialog closes session
             dlg = TeacherDialog(self, teacher)
-            # keep session alive until dialog done? dialog doesn't need session
             session.expunge(teacher)
             session.close()
             if dlg.exec():
                 data = dlg.get_data()
                 s2 = get_session()
                 try:
-                    t2 = s2.query(Teacher).filter(Teacher.id==tid).first()
-                    for k,v in data.items():
+                    t2 = s2.query(Teacher).filter(Teacher.id == tid).first()
+                    for k, v in data.items():
                         setattr(t2, k, v)
                     s2.commit()
-                    QMessageBox.information(self, "Success", "Teacher updated.")
+                    show_toast(self, "Teacher updated.")
                     self.load()
                 except Exception as e:
                     s2.rollback()
                     QMessageBox.critical(self, "Error", str(e))
                 finally:
                     s2.close()
-            else:
-                # dialog cancelled, session already closed
-                pass
             return
         except Exception as e:
             try:
                 session.close()
-            except:
+            except Exception:
                 pass
             QMessageBox.critical(self, "Error", str(e))
 
-    def delete_teacher(self):
-        tid = self._selected_id()
+    def delete_teacher(self, tid=None):
+        if tid is None:
+            tid = self._selected_id()
         if not tid:
             QMessageBox.warning(self, "Select", "Please select a teacher to delete.")
             return
@@ -190,16 +214,15 @@ class TeacherView(QWidget):
             return
         session = get_session()
         try:
-            # Check if teacher has timetable entries
-            cnt = session.query(TimetableEntry).filter(TimetableEntry.teacher_id==tid).count()
+            cnt = session.query(TimetableEntry).filter(TimetableEntry.teacher_id == tid).count()
             if cnt > 0:
                 QMessageBox.critical(self, "Cannot Delete", f"This teacher has {cnt} scheduled lecture(s). Delete or reassign those lectures first.")
                 return
-            t = session.query(Teacher).filter(Teacher.id==tid).first()
+            t = session.query(Teacher).filter(Teacher.id == tid).first()
             if t:
                 session.delete(t)
                 session.commit()
-                QMessageBox.information(self, "Deleted", "Teacher deleted.")
+                show_toast(self, "Teacher deleted.")
                 self.load()
         except Exception as e:
             session.rollback()
@@ -207,16 +230,16 @@ class TeacherView(QWidget):
         finally:
             session.close()
 
-    def view_timetable(self):
-        tid = self._selected_id()
+    def view_timetable(self, tid=None):
+        if tid is None:
+            tid = self._selected_id()
         if not tid:
             QMessageBox.warning(self, "Select", "Please select a teacher to view timetable.")
             return
         session = get_session()
         try:
-            teacher = session.query(Teacher).filter(Teacher.id==tid).first()
+            teacher = session.query(Teacher).filter(Teacher.id == tid).first()
             entries = TimetableService.get_teacher_timetable(session, tid)
-            # Show dialog with table
             dlg = QDialog(self)
             dlg.setWindowTitle(f"Timetable - {teacher.name if teacher else ''}")
             dlg.setMinimumSize(720, 400)
@@ -225,9 +248,10 @@ class TeacherView(QWidget):
             info.setObjectName("SectionTitle")
             layout.addWidget(info)
             tbl = QTableWidget(len(entries), 5)
-            tbl.setHorizontalHeaderLabels(["Day", "Time", "Semester", "Subject", "Room"])
+            tbl.setHorizontalHeaderLabels(["DAY", "TIME", "SEMESTER", "SUBJECT", "ROOM"])
             tbl.setEditTriggers(QTableWidget.NoEditTriggers)
             tbl.setAlternatingRowColors(True)
+            tbl.verticalHeader().setVisible(False)
             tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             for r, e in enumerate(sorted(entries, key=lambda x: (x.day.sort_order if x.day else 0, x.start_time))):
                 tbl.setItem(r, 0, QTableWidgetItem(e.day.name if e.day else ""))
