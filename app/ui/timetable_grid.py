@@ -26,7 +26,7 @@ class DropZone(QFrame):
         if event.mimeData().hasFormat("application/x-timetable-entry"):
             event.acceptProposedAction()
             self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #1C355E; border-radius: 2px; background: #DBEAFE; }"
+                "QFrame#DropZone { border: 2px solid #1C355E; border-radius: 2px; background: #EAEFF5; }"
             )
         else:
             event.ignore()
@@ -58,9 +58,9 @@ class DropZone(QFrame):
 
     def reset_style(self):
         if self.dark_mode:
-            self.setStyleSheet("QFrame#DropZone { border: 1px solid #2A3A5C; border-radius: 8px; background: #141F38; }")
+            self.setStyleSheet("QFrame#DropZone { border: 1px solid #2A3A5C; border-radius: 2px; background: #141F38; }")
         else:
-            self.setStyleSheet("QFrame#DropZone { border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; }")
+            self.setStyleSheet("QFrame#DropZone { border: 1px solid #DEDCD3; border-radius: 2px; background: #FFFFFF; }")
 
     def set_theme(self, dark_mode):
         self.dark_mode = dark_mode
@@ -69,11 +69,11 @@ class DropZone(QFrame):
     def set_drop_feedback(self, valid):
         if valid:
             self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #059669; border-radius: 8px; background: #ECFDF5; }"
+                "QFrame#DropZone { border: 2px solid #059669; border-radius: 2px; background: #ECFDF5; }"
             )
         else:
             self.setStyleSheet(
-                "QFrame#DropZone { border: 2px solid #DC2626; border-radius: 8px; background: #FEF2F2; }"
+                "QFrame#DropZone { border: 2px solid #9A2C2C; border-radius: 2px; background: #FEF2F2; }"
             )
 
 
