@@ -316,6 +316,28 @@ class MainWindow(QMainWindow):
         scroll.setWidget(view)
         return scroll
 
+    @staticmethod
+    def _clear_effects(root):
+        """Clear opacity effects on a page and all its children.
+
+        Fade/count-up effects are installed on individual cards, not the
+        page root — clearing only the root leaves stale effects that
+        ghost-paint over the newly shown page.
+        """
+        try:
+            root.setGraphicsEffect(None)
+        except Exception:
+            pass
+        try:
+            from PySide6.QtWidgets import QWidget as _W
+            for child in root.findChildren(_W):
+                try:
+                    child.setGraphicsEffect(None)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def on_navigate(self, key):
         idx = self.key_to_index.get(key)
         if idx is not None:
@@ -327,12 +349,7 @@ class MainWindow(QMainWindow):
                         w.show()
                     else:
                         w.hide()
-                        v = self.views.get(k)
-                        if v is not None:
-                            try:
-                                v.setGraphicsEffect(None)
-                            except Exception:
-                                pass
+                    self._clear_effects(w)
                 except Exception:
                     pass
             self.stack.setCurrentIndex(idx)
@@ -348,6 +365,16 @@ class MainWindow(QMainWindow):
 
     def open_timetable_for_semester(self, semester_id: int):
         self.sidebar.set_active("Timetable")
+        for k, i in self.key_to_index.items():
+            try:
+                w = self.stack.widget(i)
+                if i == self.key_to_index["Timetable"]:
+                    w.show()
+                else:
+                    w.hide()
+                self._clear_effects(w)
+            except Exception:
+                pass
         self.stack.setCurrentIndex(self.key_to_index["Timetable"])
         try:
             self.timetable.sem_combo.blockSignals(True)
