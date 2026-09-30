@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QFileDialog, QInputDialog, QFrame
-from PySide6.QtCore import Qt, QTime, QThread, Signal
+from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QPixmap
 from app.database import get_session
 from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
@@ -13,30 +13,9 @@ from app.ui.modals import ask, info, warn, error
 from app.ui.widgets import show_toast
 
 
-class _AIStatusThread(QThread):
-    """Background AI availability probe so refresh() never blocks on network."""
-    finished_state = Signal(str, str)
-
-    def run(self):
-        from app.database import get_session
-        session = get_session()
-        try:
-            from app.services.ai.ai_client import config_from_settings, provider_status
-            state = provider_status(config_from_settings(session))
-            self.finished_state.emit(state["state"], state["message"])
-        except Exception:
-            self.finished_state.emit("offline", "Internet connection required.")
-        finally:
-            try:
-                session.close()
-            except Exception:
-                pass
-
-
 class TimetableView(QWidget):
     def __init__(self):
         super().__init__()
-        self._ai_thread = None
         self.current_semester_id = None
         self.entries = []
         layout = QVBoxLayout(self)
@@ -86,14 +65,13 @@ class TimetableView(QWidget):
         self.generate_btn.clicked.connect(self.generate_timetable)
         actions.addWidget(self.generate_btn, 0, 3)
         from app.ui.icons import icon as _icon
-        self.ai_btn = QPushButton("AI Generate (Internet)")
-        self.ai_btn.setObjectName("SecondaryButton")
-        self.ai_btn.setIcon(_icon("sparkles", "#8A94A0", 16))
-        self.ai_btn.setToolTip("Checking AI availability...")
-        self.ai_btn.setCursor(Qt.PointingHandCursor)
-        self.ai_btn.setEnabled(False)
-        self.ai_btn.clicked.connect(self.open_ai_wizard)
-        actions.addWidget(self.ai_btn, 0, 4)
+        self.intel_btn = QPushButton("Timetable Intelligence")
+        self.intel_btn.setObjectName("SecondaryButton")
+        self.intel_btn.setIcon(_icon("sparkles", "#8A94A0", 16))
+        self.intel_btn.setToolTip("Analyze a reference timetable and generate an optimized proposal.")
+        self.intel_btn.setCursor(Qt.PointingHandCursor)
+        self.intel_btn.clicked.connect(self.open_intelligence)
+        actions.addWidget(self.intel_btn, 0, 4)
         self.format_btn = QPushButton("Format Photo")
         self.format_btn.setObjectName("SecondaryButton")
         self.format_btn.clicked.connect(self.choose_format_photo)
@@ -248,40 +226,18 @@ class TimetableView(QWidget):
     def refresh(self):
         self.load_semesters()
         self.refresh_format_status()
-        self.refresh_ai_button()
         if self.current_semester_id:
             self.load_timetable()
 
-    def refresh_ai_button(self):
-        try:
-            if self._ai_thread is not None and self._ai_thread.isRunning():
-                return
-        except Exception:
-            pass
-        from app.ui.icons import icon as _icon
-        self.ai_btn.setEnabled(False)
-        self.ai_btn.setIcon(_icon("sparkles", "#8A94A0", 16))
-        self.ai_btn.setToolTip("Checking AI availability...")
-        self._ai_thread = _AIStatusThread(self)
-        self._ai_thread.finished_state.connect(self._on_ai_status)
-        self._ai_thread.start()
-
-    def _on_ai_status(self, state, message):
-        from app.ui.icons import icon as _icon
-        ready = state == "ready"
-        self.ai_btn.setEnabled(ready)
-        self.ai_btn.setIcon(_icon("sparkles", "#5B8CFF" if ready else "#8A94A0", 16))
-        self.ai_btn.setToolTip("Generate with online AI." if ready else message)
-
-    def open_ai_wizard(self):
+    def open_intelligence(self):
         if not self.current_semester_id:
-            warn(self, "AI Generate", "Select a semester first.")
+            warn(self, "Timetable Intelligence", "Select a semester first.")
             return
-        from app.ui.ai_wizard import open_ai_wizard
-        open_ai_wizard(self, self.current_semester_id,
-                       on_applied=self._on_ai_applied)
+        from app.ui.intelligence_dialog import open_intelligence_dialog
+        open_intelligence_dialog(self, self.current_semester_id,
+                                 on_applied=self._on_intelligence_applied)
 
-    def _on_ai_applied(self):
+    def _on_intelligence_applied(self):
         self.load_timetable()
         self.header_refresh_safe()
 
