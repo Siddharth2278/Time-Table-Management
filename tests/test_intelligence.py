@@ -227,3 +227,93 @@ def test_empty_reference_refused():
     except IntelligenceError as e:
         assert "empty" in str(e).lower()
     s.close()
+
+
+def test_external_reference_files(tmp_path):
+    import json
+    from app.services.intelligence.reference_analyzer import (
+        analyze_external_reference, load_reference_file,
+    )
+    from app.services.intelligence.timetable_agent import IntelligenceError
+    rows = [
+        {"subject_code": "MA101", "subject_name": "Maths", "subject_type": "Theory",
+         "day": "Monday", "start_time": "09:00", "end_time": "10:00",
+         "teacher": "Dr A", "room": "101", "duration": "60"},
+        {"subject_code": "PH102", "subject_name": "Physics", "subject_type": "Practical",
+         "day": "Monday", "start_time": "10:00", "end_time": "11:00",
+         "teacher": "Dr B", "room": "Lab 1", "duration": "60"},
+        {"subject_code": "", "day": "", "start_time": "", "end_time": ""},
+    ]
+    csv_path = tmp_path / "ref.csv"
+    import csv
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    json_path = tmp_path / "ref.json"
+    json_path.write_text(json.dumps(rows), encoding="utf-8")
+    xlsx_path = tmp_path / "ref.xlsx"
+    from openpyxl import Workbook
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(list(rows[0].keys()))
+    for r in rows:
+        sheet.append(list(r.values()))
+    workbook.save(xlsx_path)
+    workbook.close()
+    for path in (csv_path, json_path, xlsx_path):
+        loaded, skipped = load_reference_file(str(path))
+        assert len(loaded) == 2, path
+        assert skipped == 1, path
+    s = make_session()
+    seed(s)
+    loaded, _ = load_reference_file(str(csv_path))
+    profile = analyze_external_reference(s, loaded, "ref.csv")
+    assert profile["has_data"] is True
+    assert profile["total_lectures"] == 2
+    assert profile["day_distribution"] == {"Monday": 2}
+    assert profile["practical_sessions"] == 1
+    assert profile["consecutive_practical_pairs"] == 0
+    assert profile["skipped_rows"] == 0
+    try:
+        load_reference_file(str(tmp_path / "ref.txt"))
+        assert False, "bad suffix must fail"
+    except IntelligenceError:
+        pass
+    empty_path = tmp_path / "empty.csv"
+    empty_path.write_text("code,day,start,end\n", encoding="utf-8")
+    try:
+        load_reference_file(str(empty_path))
+        assert False, "empty file must fail"
+    except IntelligenceError:
+        pass
+    s.close()
+
+
+def test_external_reference_generation(tmp_path):
+    import csv
+    from app.services.intelligence.reference_analyzer import (
+        analyze_external_reference, load_reference_file,
+    )
+    s = make_session()
+    sems = seed(s)
+    rows = []
+    for day in ("Monday", "Tuesday", "Wednesday"):
+        for start, end in (("09:00", "10:00"), ("10:00", "11:00")):
+            rows.append({"code": "CS101", "name": "Sub1", "type": "Theory",
+                         "day": day, "start": start, "end": end,
+                         "teacher": "T1", "room": "R1"})
+    path = tmp_path / "ext.csv"
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    loaded, skipped = load_reference_file(str(path))
+    assert skipped == 0
+    profile = analyze_external_reference(s, loaded, "ext.csv")
+    out = run_intelligence(s, sems[0].id, sems[0].id, "fill", ref_profile=profile)
+    assert len(out["accepted"]) == 5, out["rejected"]
+    assert out["rejected"] == []
+    assert ConflictService.detect_all_conflicts(s) == []
+    assert s.query(TimetableEntry).filter_by(semester_id=sems[0].id).count() == 0
+    s.close()
