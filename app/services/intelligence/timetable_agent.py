@@ -73,13 +73,21 @@ def _validate_final(session, semester_id: int, entries: List[dict]):
 
 
 def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
-                     progress: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
-    """Full pipeline. Writes NOTHING (rolled-back dry run)."""
+                     progress: Optional[Callable[[str], None]] = None,
+                     ref_profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Full pipeline. Writes NOTHING (rolled-back dry run).
+
+    ref_profile optionally supplies an EXTERNAL reference (file import)
+    instead of a database semester; ref_sem_id is then informational.
+    """
     done = progress or (lambda stage: None)
     if mode not in ("fill", "fresh", "replace"):
         raise IntelligenceError("Unknown generation mode.")
 
-    profile = analyze_reference(session, ref_sem_id)
+    if ref_profile is None:
+        profile = analyze_reference(session, ref_sem_id)
+    else:
+        profile = ref_profile
     if not profile.get("has_data"):
         raise IntelligenceError(
             "Reference timetable is empty. Pick a semester with lectures.")
