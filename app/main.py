@@ -4,9 +4,10 @@ from pathlib import Path
 
 # Ensure app can find resources when bundled
 def main():
-    from PySide6.QtWidgets import QApplication, QMessageBox
-    from PySide6.QtCore import QLockFile, QDir
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QLockFile
     from app.ui.main_window import MainWindow
+    from app.ui.modals import warn, error
     from app.database import init_db, get_data_dir
 
     app = QApplication(sys.argv)
@@ -19,7 +20,7 @@ def main():
     _lock = QLockFile(lock_path)
     _lock.setStaleLockTime(0)
     if not _lock.tryLock(100):
-        QMessageBox.warning(
+        warn(
             None,
             "Already running",
             "College Timetable Manager is already open.\nClose the old window (check Task Manager for CollegeTimetable.exe) then retry.",
@@ -30,7 +31,7 @@ def main():
     try:
         init_db()
     except Exception as e:
-        QMessageBox.critical(None, "Database error", f"Could not open database:\n{e}")
+        error(None, "Database error", f"Could not open database:\n{e}")
         sys.exit(1)
 
     window = MainWindow()

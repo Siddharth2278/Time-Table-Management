@@ -1,5 +1,5 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QMessageBox, QFileDialog, QInputDialog, QFrame
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QFileDialog, QInputDialog, QFrame
+from PySide6.QtCore import Qt, QTime, QThread, Signal
 from PySide6.QtGui import QPixmap
 from app.database import get_session
 from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
@@ -9,10 +9,34 @@ from app.services.export_service import export_csv, export_excel, export_pdf
 from app.ui.dialogs import LectureDialog, TimeSlotDialog
 from app.utils.helpers import time_to_minutes
 from app.ui.timetable_grid import TimetableGridWidget
+from app.ui.modals import ask, info, warn, error
+from app.ui.widgets import show_toast
+
+
+class _AIStatusThread(QThread):
+    """Background AI availability probe so refresh() never blocks on network."""
+    finished_state = Signal(str, str)
+
+    def run(self):
+        from app.database import get_session
+        session = get_session()
+        try:
+            from app.services.ai.ai_client import config_from_settings, provider_status
+            state = provider_status(config_from_settings(session))
+            self.finished_state.emit(state["state"], state["message"])
+        except Exception:
+            self.finished_state.emit("offline", "Internet connection required.")
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
 
 class TimetableView(QWidget):
     def __init__(self):
         super().__init__()
+        self._ai_thread = None
         self.current_semester_id = None
         self.entries = []
         layout = QVBoxLayout(self)
@@ -57,14 +81,23 @@ class TimetableView(QWidget):
         self.del_btn.setObjectName("DangerButton")
         self.del_btn.clicked.connect(self.delete_lecture)
         actions.addWidget(self.del_btn, 0, 2)
-        self.generate_btn = QPushButton("Generate Timetable")
+        self.generate_btn = QPushButton("Auto Generate (Offline)")
         self.generate_btn.setObjectName("PrimaryButton")
         self.generate_btn.clicked.connect(self.generate_timetable)
         actions.addWidget(self.generate_btn, 0, 3)
+        from app.ui.icons import icon as _icon
+        self.ai_btn = QPushButton("AI Generate (Internet)")
+        self.ai_btn.setObjectName("SecondaryButton")
+        self.ai_btn.setIcon(_icon("sparkles", "#8A94A0", 16))
+        self.ai_btn.setToolTip("Checking AI availability...")
+        self.ai_btn.setCursor(Qt.PointingHandCursor)
+        self.ai_btn.setEnabled(False)
+        self.ai_btn.clicked.connect(self.open_ai_wizard)
+        actions.addWidget(self.ai_btn, 0, 4)
         self.format_btn = QPushButton("Format Photo")
         self.format_btn.setObjectName("SecondaryButton")
         self.format_btn.clicked.connect(self.choose_format_photo)
-        actions.addWidget(self.format_btn, 0, 4)
+        actions.addWidget(self.format_btn, 0, 5)
         self.find_btn = QPushButton("Find Available Slot")
         self.find_btn.setObjectName("SecondaryButton")
         self.find_btn.clicked.connect(self.find_available)
@@ -86,7 +119,7 @@ class TimetableView(QWidget):
         self.print_btn.setObjectName("SecondaryButton")
         self.print_btn.clicked.connect(lambda: self.export("pdf"))
         actions.addWidget(self.print_btn, 1, 4)
-        actions.setColumnStretch(5, 1)
+        actions.setColumnStretch(6, 1)
         toolbar_inner.addLayout(actions)
         layout.addWidget(toolbar_card)
 
@@ -215,8 +248,50 @@ class TimetableView(QWidget):
     def refresh(self):
         self.load_semesters()
         self.refresh_format_status()
+        self.refresh_ai_button()
         if self.current_semester_id:
             self.load_timetable()
+
+    def refresh_ai_button(self):
+        try:
+            if self._ai_thread is not None and self._ai_thread.isRunning():
+                return
+        except Exception:
+            pass
+        from app.ui.icons import icon as _icon
+        self.ai_btn.setEnabled(False)
+        self.ai_btn.setIcon(_icon("sparkles", "#8A94A0", 16))
+        self.ai_btn.setToolTip("Checking AI availability...")
+        self._ai_thread = _AIStatusThread(self)
+        self._ai_thread.finished_state.connect(self._on_ai_status)
+        self._ai_thread.start()
+
+    def _on_ai_status(self, state, message):
+        from app.ui.icons import icon as _icon
+        ready = state == "ready"
+        self.ai_btn.setEnabled(ready)
+        self.ai_btn.setIcon(_icon("sparkles", "#5B8CFF" if ready else "#8A94A0", 16))
+        self.ai_btn.setToolTip("Generate with online AI." if ready else message)
+
+    def open_ai_wizard(self):
+        if not self.current_semester_id:
+            warn(self, "AI Generate", "Select a semester first.")
+            return
+        from app.ui.ai_wizard import open_ai_wizard
+        open_ai_wizard(self, self.current_semester_id,
+                       on_applied=self._on_ai_applied)
+
+    def _on_ai_applied(self):
+        self.load_timetable()
+        self.header_refresh_safe()
+
+    def header_refresh_safe(self):
+        try:
+            window = self.window()
+            if window is not None and hasattr(window, "header"):
+                window.header.refresh()
+        except Exception:
+            pass
 
     def _saved_format_path(self):
         session = get_session()
@@ -262,7 +337,7 @@ class TimetableView(QWidget):
             session.commit()
         except Exception as exc:
             session.rollback()
-            QMessageBox.critical(self, "Format Photo", f"Could not save the format photo:\n{exc}")
+            error(self, "Format Photo", f"Could not save the format photo:\n{exc}")
             return False
         finally:
             session.close()
@@ -273,7 +348,7 @@ class TimetableView(QWidget):
         if not self._saved_format_path() and not self.choose_format_photo():
             return
         if not self.current_semester_id:
-            QMessageBox.warning(self, "Generate", "Select a semester first.")
+            warn(self, "Generate", "Select a semester first.")
             return
         session = get_session()
         try:
@@ -283,17 +358,17 @@ class TimetableView(QWidget):
         need = sum(a["remaining"] for a in analysis)
         if need <= 0:
             self.load_timetable()
-            QMessageBox.information(self, "Timetable Ready", "All required lectures are already scheduled. The saved format is applied to this timetable view.")
+            info(self, "Timetable Ready", "All required lectures are already scheduled. The saved format is applied to this timetable view.")
             return
         preview = "\n".join(
             f"{a['subject'].code} ({a['subject'].subject_type}): "
             f"{a['scheduled']}/{a['required']} scheduled, {a['remaining']} to place"
             for a in analysis if a["remaining"] > 0)[:1200]
-        if QMessageBox.question(
+        if not ask(
             self, "Auto-Generate Timetable",
             f"Analysis of {self.sem_combo.currentText()} — {need} lecture(s) to place:\n\n{preview}\n\n"
             "Existing entries stay fixed. Every placement passes the full conflict check. Continue?",
-            QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            ok_text="Generate"):
             return
         session = get_session()
         try:
@@ -304,19 +379,15 @@ class TimetableView(QWidget):
         placed = result.get("placed", 0)
         unplaced = result.get("unplaced", [])
         if result.get("error"):
-            QMessageBox.warning(self, "Generate", str(result["error"]))
+            warn(self, "Generate", str(result["error"]))
             return
         if unplaced:
             detail = "\n".join(f"{u['code']}: {u['remaining']} left — {u['reason']}" for u in unplaced[:8])
-            QMessageBox.information(self, "Timetable Generated",
+            info(self, "Timetable Generated",
                                     f"Placed {placed} lecture(s).\n\nCould not place all:\n{detail}")
         else:
-            try:
-                from app.ui.widgets import show_toast
-                show_toast(self, f"Placed {placed} lecture(s). Timetable complete.")
-            except Exception:
-                pass
-            QMessageBox.information(self, "Timetable Ready",
+            show_toast(self, f"Placed {placed} lecture(s). Timetable complete.")
+            info(self, "Timetable Ready",
                                     f"Placed {placed} lecture(s). The saved format is applied to this timetable view.")
 
     def on_semester_changed(self, idx):
@@ -340,7 +411,7 @@ class TimetableView(QWidget):
                 self._times = []
                 self._days = []
                 self.grid.populate([], [], [], breaks={})
-                QMessageBox.warning(self, "No Working Days", "All working days are disabled. Enable at least one day in Time Slots.")
+                warn(self, "No Working Days", "All working days are disabled. Enable at least one day in Time Slots.")
                 return
             # Time slots for grid: include breaks so lunch renders hashed like web
             slots = session.query(TimeSlot).filter(TimeSlot.is_enabled==True).order_by(TimeSlot.start_time).all()
@@ -397,7 +468,7 @@ class TimetableView(QWidget):
 
     def add_lecture(self):
         if not self.current_semester_id:
-            QMessageBox.warning(self, "No Semester", "Please select a semester.")
+            warn(self, "No Semester", "Please select a semester.")
             return
         # Try to prefill from selected cell time/day
         day_id = None
@@ -417,12 +488,12 @@ class TimetableView(QWidget):
                 ok, result = TimetableService.create_entry(session, **data, academic_year=year)
                 if ok:
                     self.clear_conflict_notice()
-                    QMessageBox.information(self, "Success", "Lecture added successfully.")
+                    show_toast(self, "Lecture added successfully.")
                     self.load_timetable()
                 else:
                     msgs = "\n".join([c.message for c in result])
                     self.show_conflict_notice(msgs)
-                    QMessageBox.critical(self, "Failed to Add", msgs)
+                    error(self, "Failed to Add", msgs)
             finally:
                 session.close()
                 try:
@@ -433,13 +504,13 @@ class TimetableView(QWidget):
     def edit_lecture(self):
         eid = self._selected_entry_id()
         if not eid:
-            QMessageBox.warning(self, "Select Lecture", "Please select a lecture cell to edit. Click on a filled cell.")
+            warn(self, "Select Lecture", "Please select a lecture cell to edit. Click on a filled cell.")
             return
         session = get_session()
         try:
             entry = session.query(TimetableEntry).filter(TimetableEntry.id==eid).first()
             if not entry:
-                QMessageBox.warning(self, "Not Found", "Entry not found.")
+                warn(self, "Not Found", "Entry not found.")
                 return
             # Detached-safe copy: dialog reads scalars after session close
             try:
@@ -447,7 +518,7 @@ class TimetableView(QWidget):
                 for _f in ("id", "semester_id", "subject_id", "teacher_id", "room_id", "day_id", "start_time", "end_time", "lecture_type", "academic_year"):
                     setattr(data_entry, _f, getattr(entry, _f))
             except Exception:
-                QMessageBox.critical(self, "Error", "Could not load lecture (corrupt row).")
+                error(self, "Error", "Could not load lecture (corrupt row).")
                 return
             session.expunge(entry)
         finally:
@@ -460,12 +531,12 @@ class TimetableView(QWidget):
                 ok, result = TimetableService.update_entry(session, eid, **data)
                 if ok:
                     self.clear_conflict_notice()
-                    QMessageBox.information(self, "Success", "Lecture updated.")
+                    show_toast(self, "Lecture updated.")
                     self.load_timetable()
                 else:
                     msgs = "\n".join([c.message for c in result])
                     self.show_conflict_notice(msgs)
-                    QMessageBox.critical(self, "Conflict", msgs)
+                    error(self, "Conflict", msgs)
             finally:
                 session.close()
                 try:
@@ -486,29 +557,29 @@ class TimetableView(QWidget):
             if ok:
                 self.clear_conflict_notice()
                 self.load_timetable()
-                QMessageBox.information(self, "Lecture moved", f"Moved to {self._days[column].name} {new_start}-{new_end}.")
+                show_toast(self, f"Moved to {self._days[column].name} {new_start}-{new_end}.")
             else:
                 msgs = "\n".join([c.message for c in result])
                 self.show_conflict_notice(msgs)
                 self.grid.set_drop_feedback(row, column, False)
-                QMessageBox.critical(self, "Move blocked by conflict", msgs)
+                error(self, "Move blocked by conflict", msgs)
         finally:
             session.close()
 
     def delete_lecture(self):
         eid = self._selected_entry_id()
         if not eid:
-            QMessageBox.warning(self, "Select Lecture", "Please select a lecture to delete.")
+            warn(self, "Select Lecture", "Please select a lecture to delete.")
             return
-        if QMessageBox.question(self, "Confirm Delete", "Delete this lecture?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm Delete", "Delete this lecture?", ok_text="Delete", destructive=True):
             return
         session = get_session()
         try:
             if TimetableService.delete_entry(session, eid):
-                QMessageBox.information(self, "Deleted", "Lecture deleted. Resources freed.")
+                show_toast(self, "Lecture deleted. Resources freed.")
                 self.load_timetable()
             else:
-                QMessageBox.critical(self, "Error", "Failed to delete.")
+                error(self, "Error", "Failed to delete.")
         finally:
             session.close()
 
@@ -521,7 +592,7 @@ class TimetableView(QWidget):
             rooms = session.query(Room).filter(Room.status=="Available").all()
             # Simple dialog - use current selection's teacher/room if available, else first
             if not teachers or not rooms:
-                QMessageBox.warning(self, "Missing Data", "Need teachers and rooms to find slots.")
+                warn(self, "Missing Data", "Need teachers and rooms to find slots.")
                 return
             # For demo, use selected entry's teacher/room or first
             eid = self._selected_entry_id()
@@ -542,16 +613,16 @@ class TimetableView(QWidget):
                 return
             slots = ConflictService.find_available_slots(session, self.current_semester_id, teacher_id, room_id, dur)
             if not slots:
-                QMessageBox.information(self, "No Slots", "No available slots found.")
+                info(self, "No Slots", "No available slots found.")
                 return
             msg = "\n".join([f"✓ {s['day_name']} {s['start_time']}-{s['end_time']}" for s in slots[:10]])
-            QMessageBox.information(self, f"Available Slots ({len(slots)} found)", msg)
+            info(self, f"Available Slots ({len(slots)} found)", msg)
         finally:
             session.close()
 
     def export(self, kind: str):
         if not self.current_semester_id:
-            QMessageBox.warning(self, "No Semester", "Please select a semester first.")
+            warn(self, "No Semester", "Please select a semester first.")
             return
         session = get_session()
         try:
@@ -568,9 +639,9 @@ class TimetableView(QWidget):
             session = get_session()
             try:
                 export_csv(session, self.current_semester_id, path)
-                QMessageBox.information(self, "Exported", f"CSV exported to {path}")
+                info(self, "Exported", f"CSV exported to {path}")
             except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+                error(self, "Export Failed", str(e))
             finally:
                 session.close()
         elif kind == "excel":
@@ -580,9 +651,9 @@ class TimetableView(QWidget):
             session = get_session()
             try:
                 export_excel(session, self.current_semester_id, path)
-                QMessageBox.information(self, "Exported", f"Excel exported to {path}")
+                info(self, "Exported", f"Excel exported to {path}")
             except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+                error(self, "Export Failed", str(e))
             finally:
                 session.close()
         elif kind == "pdf":
@@ -592,9 +663,9 @@ class TimetableView(QWidget):
             session = get_session()
             try:
                 export_pdf(session, self.current_semester_id, path)
-                QMessageBox.information(self, "Exported", f"PDF exported to {path}")
+                info(self, "Exported", f"PDF exported to {path}")
             except Exception as e:
-                QMessageBox.critical(self, "Export Failed", str(e))
+                error(self, "Export Failed", str(e))
             finally:
                 session.close()
 
@@ -642,11 +713,11 @@ class TimetableView(QWidget):
                         s = TimeSlot(**data)
                         s2.add(s)
                     s2.commit()
-                    QMessageBox.information(self, "Saved", "Time slot saved. Timetable updated to allow any time.")
+                    info(self, "Saved", "Time slot saved. Timetable updated to allow any time.")
                     self.load_timetable()
                 except Exception as e:
                     s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
+                    error(self, "Error", str(e))
                 finally:
                     s2.close()
         except Exception as e:
@@ -654,4 +725,4 @@ class TimetableView(QWidget):
                 session.close()
             except:
                 pass
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))

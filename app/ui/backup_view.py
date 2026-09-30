@@ -1,26 +1,24 @@
 from pathlib import Path
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QMessageBox, QGroupBox, QLineEdit
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QGroupBox, QLineEdit
 from PySide6.QtCore import Qt
 from app.database import get_db_path, get_data_dir, get_session
 from app.services.backup_service import backup_database, restore_database, export_json, import_json
+from app.ui.modals import ask, info, error
+from app.ui.widgets import show_toast, page_header
 
 class BackupView(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(14)
-        title = QLabel("Backup & Restore")
-        title.setStyleSheet("font-size: 18px; font-weight: 800; color: var(--text-primary);")
-        layout.addWidget(title)
-        sub = QLabel("Keep your timetable safe. Backup stores a copy of the SQLite database. Restore will overwrite current data.")
-        sub.setStyleSheet("color: #64748B; font-size: 11px;")
-        sub.setWordWrap(True)
-        layout.addWidget(sub)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(12)
+        layout.addWidget(page_header(
+            "Backup & Restore",
+            "Keep your timetable safe. Backup stores a copy of the SQLite database. Restore will overwrite current data."))
 
         # Database location
         self.path_label = QLabel(f"Database location: {get_db_path()}")
-        self.path_label.setStyleSheet("background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px; color: #334155; font-size: 11px;")
+        self.path_label.setObjectName("InfoBar")
         self.path_label.setWordWrap(True)
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.path_label)
@@ -49,7 +47,7 @@ class BackupView(QWidget):
         self.restore_btn.clicked.connect(self.do_restore)
         row2.addWidget(self.restore_btn)
         rgl.addLayout(row2)
-        rgl.addWidget(QLabel("⚠ Restore will replace all current data. Backup current data first."))
+        rgl.addWidget(QLabel("Restore will replace all current data. Backup current data first."))
         layout.addWidget(rg)
 
         # Import/export json
@@ -81,22 +79,22 @@ class BackupView(QWidget):
             return
         try:
             backup_database(get_db_path(), Path(path))
-            QMessageBox.information(self, "Backup Complete", f"Backup saved to:\n{path}")
+            show_toast(self, "Backup saved.")
         except Exception as e:
-            QMessageBox.critical(self, "Backup Failed", str(e))
+            error(self, "Backup Failed", str(e))
 
     def do_restore(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select Backup to Restore", str(Path.home()), "SQLite DB (*.db);;All Files (*.*)")
         if not path:
             return
-        if QMessageBox.question(self, "Confirm Restore", "This will overwrite the current database with the backup.\n\nContinue?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm Restore", "This will overwrite the current database with the backup.\n\nContinue?", ok_text="Restore", destructive=True):
             return
         try:
             # Close any open sessions? Just copy
             restore_database(get_db_path(), Path(path))
-            QMessageBox.information(self, "Restore Complete", "Database restored successfully. Please restart the application for all views to refresh.")
+            info(self, "Restore Complete", "Database restored successfully. Please restart the application for all views to refresh.")
         except Exception as e:
-            QMessageBox.critical(self, "Restore Failed", str(e))
+            error(self, "Restore Failed", str(e))
 
     def do_export_json(self):
         default = str(Path.home() / "Documents" / "timetable_export.json")
@@ -106,9 +104,9 @@ class BackupView(QWidget):
         session = get_session()
         try:
             export_json(session, Path(path))
-            QMessageBox.information(self, "Exported", f"Exported to {path}")
+            show_toast(self, "Data exported.")
         except Exception as e:
-            QMessageBox.critical(self, "Export Failed", str(e))
+            error(self, "Export Failed", str(e))
         finally:
             session.close()
 
@@ -116,13 +114,13 @@ class BackupView(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Import JSON", str(Path.home()), "JSON (*.json)")
         if not path:
             return
-        if QMessageBox.question(self, "Confirm Import", "Importing will replace all current data.\n\nContinue?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm Import", "Importing will replace all current data.\n\nContinue?", ok_text="Import", destructive=True):
             return
         session = get_session()
         try:
             import_json(session, Path(path))
-            QMessageBox.information(self, "Imported", "Data imported successfully. Please restart the application.")
+            info(self, "Imported", "Data imported successfully. Please restart the application.")
         except Exception as e:
-            QMessageBox.critical(self, "Import Failed", str(e))
+            error(self, "Import Failed", str(e))
         finally:
             session.close()

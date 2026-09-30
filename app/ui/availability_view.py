@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QMessageBox, QTabWidget
+    QTableWidgetItem, QHeaderView, QTabWidget
 )
 from PySide6.QtCore import Qt
 from app.database import get_session
 from app.models import TeacherAvailability, RoomAvailability
 from app.ui.dialogs import AvailabilityDialog
+from app.ui.modals import ask, info, warn, error
+from app.ui.widgets import show_toast
 
 
 class AvailabilityView(QWidget):
@@ -121,10 +123,10 @@ class AvailabilityView(QWidget):
                 session.add(model(**{field: data["entity_id"], "day_id": data["day_id"], "start_time": data["start_time"], "end_time": data["end_time"], "is_unavailable": True, "reason": data["reason"]}))
                 session.commit()
                 self.load_current()
-                QMessageBox.information(self, "Saved", "Unavailable period saved. Timetable validation will block this time.")
+                show_toast(self, "Unavailable period saved.")
             except Exception as exc:
                 session.rollback()
-                QMessageBox.critical(self, "Error", str(exc))
+                error(self, "Error", str(exc))
             finally:
                 session.close()
 
@@ -132,7 +134,7 @@ class AvailabilityView(QWidget):
         is_teacher = self.tabs.currentIndex() == 0
         record_id = self._selected_id()
         if not record_id:
-            QMessageBox.warning(self, "Select", "Please select an unavailable period to edit.")
+            warn(self, "Select", "Please select an unavailable period to edit.")
             return
         model = TeacherAvailability if is_teacher else RoomAvailability
         field = "teacher_id" if is_teacher else "room_id"
@@ -159,16 +161,16 @@ class AvailabilityView(QWidget):
                 self.load_current()
             except Exception as exc:
                 session.rollback()
-                QMessageBox.critical(self, "Error", str(exc))
+                error(self, "Error", str(exc))
             finally:
                 session.close()
 
     def delete_current(self):
         record_id = self._selected_id()
         if not record_id:
-            QMessageBox.warning(self, "Select", "Please select an unavailable period to delete.")
+            warn(self, "Select", "Please select an unavailable period to delete.")
             return
-        if QMessageBox.question(self, "Confirm", "Delete this unavailable period?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm", "Delete this unavailable period?", ok_text="Delete", destructive=True):
             return
         model = TeacherAvailability if self.tabs.currentIndex() == 0 else RoomAvailability
         session = get_session()
@@ -180,6 +182,6 @@ class AvailabilityView(QWidget):
                 self.load_current()
         except Exception as exc:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(exc))
+            error(self, "Error", str(exc))
         finally:
             session.close()

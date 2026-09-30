@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox,
-    QPushButton, QMessageBox, QTimeEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QTextEdit, QCheckBox
+    QPushButton, QTimeEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QTextEdit, QCheckBox
 )
 from PySide6.QtCore import QTime, Qt
 from sqlalchemy.orm import Session
@@ -10,18 +10,15 @@ from app.utils.validators import is_valid_email
 from app.utils.helpers import time_to_minutes
 from app.services.conflict_service import ConflictService
 from app.ui.widgets import pin_dialog_buttons, style_dialog_buttons
+from app.ui.modals import info as modal_info, error as modal_error
+
 
 def show_error(parent, msg):
     # Keep validation and conflict text exactly as produced by the service.
-    box = QMessageBox(parent)
-    box.setIcon(QMessageBox.Critical)
-    box.setWindowTitle("Error")
-    box.setText(str(msg))
-    box.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
-    box.exec()
+    modal_error(parent, "Error", str(msg))
 
 def show_info(parent, msg):
-    QMessageBox.information(parent, "Info", msg)
+    modal_info(parent, "Info", str(msg))
 
 class TeacherDialog(QDialog):
     def __init__(self, parent=None, teacher: Teacher | None = None):
@@ -454,8 +451,8 @@ class LectureDialog(QDialog):
         txt = "Available: " + ", ".join([f"{s['day_name']} {s['start_time']}-{s['end_time']}" for s in slots[:5]])
         self.info_label.setText(txt)
         # Also popup
-        msg = "\n".join([f"✓ {s['day_name']} {s['start_time']}-{s['end_time']}" for s in slots[:8]])
-        QMessageBox.information(self, "Available Slots", msg)
+        msg = "\n".join([f"• {s['day_name']} {s['start_time']}-{s['end_time']}" for s in slots[:8]])
+        modal_info(self, "Available Slots", msg)
 
     def accept(self):
         # Basic validation
@@ -484,16 +481,16 @@ class LectureDialog(QDialog):
         conflicts = ConflictService.validate_all(self.session, sem_id, subj_id, teacher_id, room_id, day_id, start, end, exclude_id=exclude, check_subject_limit=True)
         has = [c for c in conflicts if c.has_conflict]
         if has:
-            msgs = "\n\n".join([f"❌ {c.message}" for c in has])
+            msgs = "\n\n".join([c.message for c in has])
             # Suggest alternatives
             try:
                 dur = time_to_minutes(end) - time_to_minutes(start)
                 suggestions = ConflictService.suggest_alternative_slots(self.session, sem_id, teacher_id, room_id, dur, day_id=day_id, limit=5)
                 if suggestions:
-                    msgs += "\n\nSuggested alternatives:\n" + "\n".join([f"✓ {s['day_name']} {s['start_time']}-{s['end_time']}" for s in suggestions])
+                    msgs += "\n\nSuggested alternatives:\n" + "\n".join([f"• {s['day_name']} {s['start_time']}-{s['end_time']}" for s in suggestions])
             except:
                 pass
-            QMessageBox.critical(self, "Conflict Detected", msgs)
+            modal_error(self, "Conflict Detected", msgs)
             return
         super().accept()
 
