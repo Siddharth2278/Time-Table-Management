@@ -268,6 +268,7 @@ def _dark() -> str:
     }
     QGroupBox::title {
         subcontrol-origin: margin; left: 14px; padding: 2px 10px;
+        background-color: #11161D;
         color: #9AA6B2; font-size: 11px; font-weight: 700;
     }
     QProgressBar {
@@ -299,6 +300,12 @@ def _dark() -> str:
     QCheckBox::indicator:checked { background: #5B8CFF; border-color: #5B8CFF; }
     QCheckBox#Switch { background: transparent; spacing: 0px; }
     QCheckBox#Switch::indicator { width: 0px; height: 0px; border: none; background: transparent; }
+    QRadioButton { color: #F4F7FA; spacing: 8px; background: transparent; }
+    QRadioButton::indicator {
+        width: 15px; height: 15px; border-radius: 8px;
+        border: 1px solid #3A4654; background: #0B0F14;
+    }
+    QRadioButton::indicator:checked { background: #5B8CFF; border-color: #5B8CFF; }
     QToolTip { background-color: #1F2733; color: #F4F7FA; border: 1px solid #3A4654; border-radius: 6px; }
     /* Banners */
     QLabel#HelpBody {
@@ -503,6 +510,7 @@ def _light() -> str:
     }
     QGroupBox::title {
         subcontrol-origin: margin; left: 14px; padding: 2px 10px;
+        background-color: #FFFFFF;
         color: #6B7280; font-size: 11px; font-weight: 700;
     }
     QProgressBar {
@@ -534,6 +542,12 @@ def _light() -> str:
     QCheckBox::indicator:checked { background: #1C355E; border-color: #1C355E; }
     QCheckBox#Switch { background: transparent; spacing: 0px; }
     QCheckBox#Switch::indicator { width: 0px; height: 0px; border: none; background: transparent; }
+    QRadioButton { color: #1E293B; spacing: 8px; background: transparent; }
+    QRadioButton::indicator {
+        width: 15px; height: 15px; border-radius: 8px;
+        border: 1px solid #CBD5E1; background: #FFFFFF;
+    }
+    QRadioButton::indicator:checked { background: #1C355E; border-color: #1C355E; }
     QToolTip { background-color: #111827; color: #F9FAFB; border: 1px solid #374151; border-radius: 6px; }
     QLabel#HelpBody {
         font-size: 12.5px; padding: 2px 0;

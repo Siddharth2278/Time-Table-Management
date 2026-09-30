@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox,
-    QPushButton, QTimeEdit, QListWidget, QListWidgetItem, QTextEdit, QCheckBox
+    QPushButton, QTimeEdit, QCheckBox
 )
 from PySide6.QtCore import QTime
 from sqlalchemy.orm import Session
