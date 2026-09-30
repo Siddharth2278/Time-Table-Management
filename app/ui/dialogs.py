@@ -1,15 +1,15 @@
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox,
-    QPushButton, QTimeEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QTextEdit, QCheckBox
+    QFormLayout, QLabel, QLineEdit, QComboBox, QSpinBox,
+    QPushButton, QTimeEdit, QListWidget, QListWidgetItem, QTextEdit, QCheckBox
 )
-from PySide6.QtCore import QTime, Qt
+from PySide6.QtCore import QTime
 from sqlalchemy.orm import Session
 from app.database import get_session
 from app.models import Teacher, Subject, Room, Semester, WorkingDay, TimeSlot, TeacherAvailability, RoomAvailability
 from app.utils.validators import is_valid_email
 from app.utils.helpers import time_to_minutes
 from app.services.conflict_service import ConflictService
-from app.ui.widgets import pin_dialog_buttons, style_dialog_buttons
+from app.ui.base_dialog import BaseDialog
 from app.ui.modals import info as modal_info, error as modal_error
 
 
@@ -20,14 +20,11 @@ def show_error(parent, msg):
 def show_info(parent, msg):
     modal_info(parent, "Info", str(msg))
 
-class TeacherDialog(QDialog):
+class TeacherDialog(BaseDialog):
     def __init__(self, parent=None, teacher: Teacher | None = None):
-        super().__init__(parent)
+        super().__init__(parent, "Edit Teacher" if teacher else "Add Teacher",
+                         min_width=420)
         self.teacher = teacher
-        self.setWindowTitle("Edit Teacher" if teacher else "Add Teacher")
-        self.setMinimumWidth(420)
-        self.setModal(True)
-        layout = QVBoxLayout(self)
         form = QFormLayout()
         self.name_edit = QLineEdit(teacher.name if teacher else "")
         self.email_edit = QLineEdit(teacher.email if teacher else "")
@@ -47,13 +44,7 @@ class TeacherDialog(QDialog):
         form.addRow("Department:", self.dept_edit)
         form.addRow("Designation:", self.desig_combo)
         form.addRow("Status:", self.status_combo)
-        layout.addLayout(form)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
-        style_dialog_buttons(btns)
-        pin_dialog_buttons(self)
+        self.body_layout.addLayout(form)
 
     def accept(self):
         if not self.name_edit.text().strip():
@@ -73,14 +64,11 @@ class TeacherDialog(QDialog):
             "status": self.status_combo.currentText()
         }
 
-class RoomDialog(QDialog):
+class RoomDialog(BaseDialog):
     def __init__(self, parent=None, room: Room | None = None):
-        super().__init__(parent)
+        super().__init__(parent, "Edit Room/Lab" if room else "Add Room/Lab",
+                         min_width=420)
         self.room = room
-        self.setWindowTitle("Edit Room/Lab" if room else "Add Room/Lab")
-        self.setMinimumWidth(420)
-        self.setModal(True)
-        layout = QVBoxLayout(self)
         form = QFormLayout()
         self.name_edit = QLineEdit(room.name if room else "")
         self.number_edit = QLineEdit(room.room_number if room else "")
@@ -100,13 +88,7 @@ class RoomDialog(QDialog):
         form.addRow("Type:", self.type_combo)
         form.addRow("Capacity:", self.capacity_spin)
         form.addRow("Status:", self.status_combo)
-        layout.addLayout(form)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
-        style_dialog_buttons(btns)
-        pin_dialog_buttons(self)
+        self.body_layout.addLayout(form)
 
     def accept(self):
         if not self.name_edit.text().strip():
@@ -126,16 +108,13 @@ class RoomDialog(QDialog):
             "status": self.status_combo.currentText()
         }
 
-class SubjectDialog(QDialog):
+class SubjectDialog(BaseDialog):
     def __init__(self, parent=None, subject: Subject | None = None, session: Session | None = None):
-        super().__init__(parent)
+        super().__init__(parent, "Edit Subject" if subject else "Add Subject",
+                         min_width=480)
         self.subject = subject
         self.session = session or get_session()
         self.owns_session = session is None
-        self.setWindowTitle("Edit Subject" if subject else "Add Subject")
-        self.setMinimumWidth(480)
-        self.setModal(True)
-        layout = QVBoxLayout(self)
         form = QFormLayout()
         self.code_edit = QLineEdit(subject.code if subject else "")
         self.name_edit = QLineEdit(subject.name if subject else "")
@@ -186,13 +165,7 @@ class SubjectDialog(QDialog):
         form.addRow("Lecture Duration (mins):", self.dur_combo)
         form.addRow("Assigned Teacher:", self.teacher_combo)
         form.addRow("Assigned Room:", self.room_combo)
-        layout.addLayout(form)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
-        style_dialog_buttons(btns)
-        pin_dialog_buttons(self)
+        self.body_layout.addLayout(form)
 
     def closeEvent(self, event):
         if self.owns_session:
@@ -224,15 +197,12 @@ class SubjectDialog(QDialog):
             "room_requirement": "Laboratory" if self.type_combo.currentText() in ["Lab", "Practical"] else "Classroom"
         }
 
-class LectureDialog(QDialog):
+class LectureDialog(BaseDialog):
     def __init__(self, parent=None, semester_id: int | None = None, day_id: int | None = None, start_time: str | None = None, end_time: str | None = None, entry=None):
-        super().__init__(parent)
+        super().__init__(parent, "Edit Lecture" if entry else "Add Lecture",
+                         min_width=520)
         self.entry = entry
-        self.setWindowTitle("Edit Lecture" if entry else "Add Lecture")
-        self.setMinimumWidth(520)
-        self.setModal(True)
         self.session = get_session()
-        layout = QVBoxLayout(self)
         form = QFormLayout()
         # Semester
         self.sem_combo = QComboBox()
@@ -323,30 +293,21 @@ class LectureDialog(QDialog):
         form.addRow("Start Time*:", self.start_edit)
         form.addRow("End Time*:", self.end_edit)
         form.addRow("Lecture Type:", self.type_combo)
-        layout.addLayout(form)
+        self.body_layout.addLayout(form)
 
         # Info label for suggestions
         self.info_label = QLabel("")
         self.info_label.setWordWrap(True)
         self.info_label.setObjectName("InfoBar")
-        layout.addWidget(self.info_label)
+        self.body_layout.addWidget(self.info_label)
 
         if not self.entry:
             self._on_subject_changed()
 
-        btn_layout = QHBoxLayout()
         self.find_btn = QPushButton("Find Available Slot")
         self.find_btn.setObjectName("SecondaryButton")
         self.find_btn.clicked.connect(self.find_slots)
-        btn_layout.addWidget(self.find_btn)
-        btn_layout.addStretch()
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        btn_layout.addWidget(btns)
-        layout.addLayout(btn_layout)
-        style_dialog_buttons(btns)
-        pin_dialog_buttons(self)
+        self.body_layout.addWidget(self.find_btn)
 
     def _set_info(self, text, banner):
         """Themed info line: 'InfoBar' neutral, 'BannerOk' success, 'BannerErr' error."""
@@ -513,13 +474,11 @@ class LectureDialog(QDialog):
             pass
         super().closeEvent(event)
 
-class TimeSlotDialog(QDialog):
+class TimeSlotDialog(BaseDialog):
     def __init__(self, parent=None, slot: TimeSlot | None = None):
-        super().__init__(parent)
+        super().__init__(parent, "Edit Time Slot" if slot else "Add Time Slot",
+                         min_width=380)
         self.slot = slot
-        self.setWindowTitle("Edit Time Slot" if slot else "Add Time Slot")
-        self.setMinimumWidth(380)
-        layout = QVBoxLayout(self)
         form = QFormLayout()
         self.start_edit = QTimeEdit()
         self.start_edit.setDisplayFormat("HH:mm")
@@ -541,13 +500,7 @@ class TimeSlotDialog(QDialog):
         form.addRow("End Time:", self.end_edit)
         form.addRow("", self.is_break_check)
         form.addRow("Break Name:", self.break_name_edit)
-        layout.addLayout(form)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
-        style_dialog_buttons(btns)
-        pin_dialog_buttons(self)
+        self.body_layout.addLayout(form)
 
     def accept(self):
         s = self.start_edit.time().toString("HH:mm")
@@ -578,15 +531,13 @@ class TimeSlotDialog(QDialog):
             "is_enabled": True
         }
 
-class AvailabilityDialog(QDialog):
+class AvailabilityDialog(BaseDialog):
     def __init__(self, parent=None, teacher_id=None, room_id=None, existing=None, is_teacher=True):
-        super().__init__(parent)
+        super().__init__(parent, "Edit Unavailability" if existing else ("Add Teacher Unavailability" if is_teacher else "Add Room Unavailability"),
+                         min_width=420)
         self.is_teacher = is_teacher
         self.existing = existing
-        self.setWindowTitle("Edit Unavailability" if existing else ("Add Teacher Unavailability" if is_teacher else "Add Room Unavailability"))
-        self.setMinimumWidth(420)
         self.session = get_session()
-        layout = QVBoxLayout(self)
         form = QFormLayout()
         self.entity_combo = QComboBox()
         if is_teacher:
@@ -639,13 +590,7 @@ class AvailabilityDialog(QDialog):
         form.addRow("Start:", self.start_edit)
         form.addRow("End:", self.end_edit)
         form.addRow("Reason:", self.reason_edit)
-        layout.addLayout(form)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
-        style_dialog_buttons(btns)
-        pin_dialog_buttons(self)
+        self.body_layout.addLayout(form)
 
     def accept(self):
         s = self.start_edit.time().toString("HH:mm")

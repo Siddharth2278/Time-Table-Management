@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QLineEdit, QComboBox, QDialog, QVBoxLayout as VBox,
-    QTableWidget as Tbl, QDialogButtonBox, QFrame
+    QHeaderView, QLineEdit, QComboBox,
+    QTableWidget as Tbl, QFrame
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -11,7 +11,8 @@ from app.models import Room, TimetableEntry
 from app.ui.dialogs import RoomDialog
 from app.services.timetable_service import TimetableService
 from app.ui.icons import icon
-from app.ui.widgets import page_header, show_toast, style_dialog_buttons
+from app.ui.widgets import page_header, show_toast
+from app.ui.base_dialog import BaseDialog
 from app.ui.modals import ask, warn, error
 
 STATUS_OK = ("#166534", "#DCFCE7")
@@ -265,13 +266,11 @@ class RoomView(QWidget):
         try:
             room = session.query(Room).filter(Room.id == rid).first()
             entries = TimetableService.get_room_timetable(session, rid)
-            dlg = QDialog(self)
-            dlg.setWindowTitle(f"Room Timetable - {room.name if room else ''}")
+            dlg = BaseDialog(self, f"Room Timetable - {room.name if room else ''}")
             dlg.setMinimumSize(720, 400)
-            layout = VBox(dlg)
             info = QLabel(f"Room: {room.name if room else ''} ({room.room_number if room else ''}) | Lectures: {len(entries)}")
             info.setObjectName("SectionTitle")
-            layout.addWidget(info)
+            dlg.body_layout.addWidget(info)
             tbl = Tbl(len(entries), 5)
             tbl.setHorizontalHeaderLabels(["DAY", "TIME", "SEMESTER", "SUBJECT", "TEACHER"])
             tbl.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -284,12 +283,7 @@ class RoomView(QWidget):
                 tbl.setItem(r, 2, QTableWidgetItem(e.semester.name if e.semester else ""))
                 tbl.setItem(r, 3, QTableWidgetItem(f"{e.subject.code if e.subject else ''} - {e.subject.name if e.subject else ''}"))
                 tbl.setItem(r, 4, QTableWidgetItem(e.teacher.name if e.teacher else ""))
-            layout.addWidget(tbl)
-            btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-            btns.accepted.connect(dlg.accept)
-            btns.rejected.connect(dlg.reject)
-            style_dialog_buttons(btns)
-            layout.addWidget(btns)
+            dlg.body_layout.addWidget(tbl)
             dlg.exec()
         finally:
             session.close()
