@@ -38,17 +38,19 @@ class _Worker(QThread):
     done_ok = Signal(dict)
     failed = Signal(str)
 
-    def __init__(self, target_id, ref_id, mode):
+    def __init__(self, target_id, ref_id, mode, ref_profile=None):
         super().__init__()
         self._target_id = target_id
         self._ref_id = ref_id
         self._mode = mode
+        self._ref_profile = ref_profile
 
     def run(self):
         session = get_session()
         try:
             out = run_intelligence(session, self._target_id, self._ref_id,
-                                   self._mode, progress=self.progressed.emit)
+                                   self._mode, progress=self.progressed.emit,
+                                   ref_profile=self._ref_profile)
             self.done_ok.emit(out)
         except IntelligenceError as e:
             self.failed.emit(str(e))
@@ -70,15 +72,22 @@ class IntelligenceDialog(BaseDialog):
         self._result = None
         self._worker = None
         self._session = get_session()
+        self._external = None
 
         top = QGroupBox("REFERENCE & MODE")
         grid = QVBoxLayout(top)
         ref_row = QHBoxLayout()
         ref_row.addWidget(QLabel("Reference timetable:"))
         self.ref_combo = QComboBox()
-        self.ref_combo.setMinimumWidth(260)
-        self.ref_combo.currentIndexChanged.connect(self._analyze_reference)
+        self.ref_combo.setMinimumWidth(220)
+        self.ref_combo.currentIndexChanged.connect(self._on_ref_combo_changed)
         ref_row.addWidget(self.ref_combo, 1)
+        self.ext_btn = QPushButton("External File…")
+        self.ext_btn.setObjectName("SecondaryButton")
+        self.ext_btn.setCursor(Qt.PointingHandCursor)
+        self.ext_btn.setToolTip("Use a CSV, JSON or Excel timetable as the reference format.")
+        self.ext_btn.clicked.connect(self._load_external_reference)
+        ref_row.addWidget(self.ext_btn)
         grid.addLayout(ref_row)
         self.mode_fill = QRadioButton("Fill Missing Lectures")
         self.mode_fill.setChecked(True)
@@ -170,7 +179,55 @@ class IntelligenceDialog(BaseDialog):
         self.ref_combo.blockSignals(False)
         self._analyze_reference()
 
+    def _on_ref_combo_changed(self):
+        # Picking a semester drops any loaded external file.
+        self._external = None
+        self._analyze_reference()
+
+    def _load_external_reference(self):
+        from PySide6.QtWidgets import QFileDialog
+        from app.services.intelligence.reference_analyzer import (
+            analyze_external_reference, load_reference_file,
+        )
+        from app.services.intelligence.timetable_agent import IntelligenceError
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load External Reference Timetable", "",
+            "Timetable files (*.csv *.json *.xlsx);;All files (*.*)")
+        if not path:
+            return
+        try:
+            rows, skipped = load_reference_file(path)
+            label = path.replace("\\", "/").rsplit("/", 1)[-1]
+            profile = analyze_external_reference(self._session, rows, label)
+        except IntelligenceError as e:
+            modal_error(self, "External Reference", str(e))
+            return
+        except Exception:
+            modal_error(self, "External Reference",
+                        "Could not read reference file.")
+            return
+        self._external = {"label": label, "profile": profile, "skipped": skipped}
+        self._show_external_summary()
+
+    def _show_external_summary(self):
+        profile = self._external["profile"]
+        days = profile["working_days"]
+        day_range = f"{days[0]}-{days[-1]}" if days else "-"
+        skipped = f", {self._external['skipped']} row(s) skipped" if self._external["skipped"] else ""
+        self.ref_summary.setText(
+            f"External Reference: {self._external['label']} — "
+            f"{profile['total_lectures']} lectures{skipped}, {day_range}, "
+            f"avg {profile['average_daily_lectures']}/day, "
+            f"{profile['subject_count']} subjects, "
+            f"{profile['practical_sessions']} practical sessions, "
+            f"morning {profile['morning_lectures']}/afternoon {profile['afternoon_lectures']}, "
+            f"density {profile['density']}. "
+            f"Changing the semester list clears this file.")
+
     def _analyze_reference(self):
+        if self._external is not None:
+            self._show_external_summary()
+            return
         ref_id = self.ref_combo.currentData()
         if ref_id is None:
             self.ref_summary.setText("No reference timetable available.")
@@ -210,7 +267,8 @@ class IntelligenceDialog(BaseDialog):
         for label in self._stage_labels.values():
             label.setText("Waiting")
         self.generate_btn.setEnabled(False)
-        self._worker = _Worker(self._target_id, ref_id, self._mode())
+        ref_profile = self._external["profile"] if self._external else None
+        self._worker = _Worker(self._target_id, ref_id, self._mode(), ref_profile)
         self._worker.progressed.connect(self._mark_stage)
         self._worker.done_ok.connect(self._on_done)
         self._worker.failed.connect(self._on_failed)
