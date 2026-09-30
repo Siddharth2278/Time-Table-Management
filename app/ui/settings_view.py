@@ -76,41 +76,16 @@ class SettingsView(QWidget):
         af.addRow("", hint2)
         layout.addWidget(self.group_appear)
 
-        self.group_ai = QGroupBox("AI TIMETABLE ASSISTANT")
+        self.group_ai = QGroupBox("TIMETABLE INTELLIGENCE")
         af_ai = QFormLayout(self.group_ai)
         af_ai.setContentsMargins(16, 22, 16, 16)
         af_ai.setSpacing(10)
-        self.ai_status = QLabel("● Checking...")
-        self.ai_status.setObjectName("Muted")
-        af_ai.addRow("Internet Status:", self.ai_status)
-        self.ai_provider = QComboBox()
-        self.ai_provider.addItems(["openai-compatible", "custom"])
-        af_ai.addRow("AI Provider:", self.ai_provider)
-        self.ai_endpoint = QLineEdit()
-        self.ai_endpoint.setPlaceholderText("https://api.example.com/v1")
-        af_ai.addRow("Endpoint:", self.ai_endpoint)
-        self.ai_model = QLineEdit()
-        self.ai_model.setPlaceholderText("e.g., gpt-4o-mini")
-        af_ai.addRow("Model:", self.ai_model)
-        self.ai_key = QLineEdit()
-        self.ai_key.setEchoMode(QLineEdit.Password)
-        self.ai_key.setPlaceholderText("Not set")
-        af_ai.addRow("API Key:", self.ai_key)
-        key_hint = QLabel("Stored locally, never shown again after saving. CTM_AI_API_KEY env wins.")
-        key_hint.setObjectName("Muted")
-        key_hint.setWordWrap(True)
-        af_ai.addRow("", key_hint)
         self.ai_reference = Switch("Use reference timetable patterns")
         af_ai.addRow("Reference:", self.ai_reference)
-        test_row = QHBoxLayout()
-        test_row.setContentsMargins(0, 0, 0, 0)
-        self.ai_test_btn = QPushButton("Test Connection")
-        self.ai_test_btn.setObjectName("SecondaryButton")
-        self.ai_test_btn.setCursor(Qt.PointingHandCursor)
-        self.ai_test_btn.clicked.connect(self.test_ai_connection)
-        test_row.addWidget(self.ai_test_btn)
-        test_row.addStretch()
-        af_ai.addRow("", test_row)
+        intel_hint = QLabel("Smart generation runs fully offline. No accounts, keys or internet needed.")
+        intel_hint.setObjectName("Muted")
+        intel_hint.setWordWrap(True)
+        af_ai.addRow("", intel_hint)
         layout.addWidget(self.group_ai)
 
         self.group_backup = QGroupBox("DATA BACKUP")
@@ -190,24 +165,9 @@ class SettingsView(QWidget):
             idx = self.theme_combo.findData(theme)
             if idx >= 0:
                 self.theme_combo.setCurrentIndex(idx)
-            provider = get("ai_provider", "openai-compatible")
-            pidx = self.ai_provider.findText(provider)
-            if pidx >= 0:
-                self.ai_provider.setCurrentIndex(pidx)
-            self.ai_endpoint.setText(get("ai_endpoint", ""))
-            self.ai_model.setText(get("ai_model", ""))
             self.ai_reference.blockSignals(True)
             self.ai_reference.setChecked(get("ai_reference_enabled", "1") != "0")
             self.ai_reference.blockSignals(False)
-            self.ai_key.clear()
-            try:
-                import os
-                from app.services.ai.ai_client import stored_key_get
-                has_key = bool(os.environ.get("CTM_AI_API_KEY", "") or stored_key_get())
-            except Exception:
-                has_key = False
-            self.ai_key.setPlaceholderText("Saved (hidden)" if has_key else "Not set")
-            self.refresh_ai_status()
             self.info_label.setText(f"Storage: {get_data_dir()}  •  DB: {get_db_path().name}  •  Offline SQLite — survives reinstall")
         finally:
             session.close()
@@ -248,63 +208,15 @@ class SettingsView(QWidget):
             set_key("default_end_time", end)
             theme = self.theme_combo.currentData()
             set_key("theme", theme)
-            set_key("ai_provider", self.ai_provider.currentText())
-            set_key("ai_endpoint", self.ai_endpoint.text().strip())
-            set_key("ai_model", self.ai_model.text().strip())
             set_key("ai_reference_enabled", "1" if self.ai_reference.isChecked() else "0")
-            new_key = self.ai_key.text().strip()
-            if new_key:
-                try:
-                    from app.services.ai.ai_client import stored_key_set
-                    stored_key_set(new_key)
-                except Exception:
-                    pass
-                self.ai_key.clear()
-                self.ai_key.setPlaceholderText("Saved (hidden)")
             session.commit()
             self.themeChanged.emit(theme)
-            self.refresh_ai_status()
             show_toast(self, "Settings saved and theme applied.")
         except Exception as e:
             session.rollback()
             error(self, "Error", str(e))
         finally:
             session.close()
-
-    def refresh_ai_status(self):
-        try:
-            from app.services.ai.ai_client import config_from_settings, provider_status
-            session = get_session()
-            try:
-                state = provider_status(config_from_settings(session))
-            finally:
-                session.close()
-        except Exception:
-            state = {"state": "offline", "message": "Internet connection required."}
-        dot = {"ready": "● Connected", "offline": "● Offline"}.get(
-            state["state"], "● Not configured")
-        self.ai_status.setText(f"{dot} — {state['message']}")
-
-    def test_ai_connection(self):
-        try:
-            from app.services.ai.ai_client import (
-                AIConfig, provider_status, stored_key_get,
-            )
-            import os
-            key = self.ai_key.text().strip() or os.environ.get("CTM_AI_API_KEY", "") or stored_key_get()
-            config = AIConfig(
-                provider=self.ai_provider.currentText(),
-                endpoint=self.ai_endpoint.text().strip(),
-                model=self.ai_model.text().strip(),
-                api_key=key)
-            state = provider_status(config)
-        except Exception:
-            state = {"state": "offline", "message": "Internet connection required."}
-        if state["state"] == "ready":
-            info(self, "AI Connection", "Connected. The AI generator is available.")
-        else:
-            warn(self, "AI Connection", state["message"])
-        self.refresh_ai_status()
 
     def backup_now(self):
         path, _ = QFileDialog.getSaveFileName(
