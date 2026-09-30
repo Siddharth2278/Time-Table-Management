@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QLineEdit, QComboBox, QDialog, QVBoxLayout as VBox,
+    QHeaderView, QLineEdit, QComboBox, QDialog, QVBoxLayout as VBox,
     QTableWidget as Tbl, QDialogButtonBox, QFrame
 )
 from PySide6.QtCore import Qt
@@ -12,6 +12,7 @@ from app.ui.dialogs import RoomDialog
 from app.services.timetable_service import TimetableService
 from app.ui.icons import icon
 from app.ui.widgets import page_header, show_toast, style_dialog_buttons
+from app.ui.modals import ask, warn, error
 
 STATUS_OK = ("#166534", "#DCFCE7")
 STATUS_BAD = ("#991B1B", "#FEE2E2")
@@ -162,7 +163,7 @@ class RoomView(QWidget):
             try:
                 dup = session.query(Room).filter(Room.name.ilike(data["name"].strip())).first()
                 if dup:
-                    QMessageBox.critical(self, "Duplicate Not Allowed", f"Room name '{data['name']}' already exists (ID {dup.id}: {dup.name} - {dup.room_number}).\n\nSame name is not allowed.\nLab 1 A and Lab 1 B are allowed because they are different names.")
+                    error(self, "Duplicate Not Allowed", f"Room name '{data['name']}' already exists (ID {dup.id}: {dup.name} - {dup.room_number}).\n\nSame name is not allowed.\nLab 1 A and Lab 1 B are allowed because they are different names.")
                     session.close()
                     return
                 room = Room(**data)
@@ -172,7 +173,7 @@ class RoomView(QWidget):
                 self.load()
             except Exception as e:
                 session.rollback()
-                QMessageBox.critical(self, "Error", str(e))
+                error(self, "Error", str(e))
             finally:
                 try:
                     session.close()
@@ -183,7 +184,7 @@ class RoomView(QWidget):
         if rid is None:
             rid = self._selected_id()
         if not rid:
-            QMessageBox.warning(self, "Select", "Please select a room to edit.")
+            warn(self, "Select", "Please select a room to edit.")
             return
         session = get_session()
         try:
@@ -199,7 +200,7 @@ class RoomView(QWidget):
                 try:
                     dup2 = chk.query(Room).filter(Room.name.ilike(data["name"].strip()), Room.id != rid).first()
                     if dup2:
-                        QMessageBox.critical(self, "Duplicate Not Allowed", f"Another room already has name '{data['name']}' (ID {dup2.id}). Same name not allowed.")
+                        error(self, "Duplicate Not Allowed", f"Another room already has name '{data['name']}' (ID {dup2.id}). Same name not allowed.")
                         chk.close()
                         return
                     chk.close()
@@ -218,7 +219,7 @@ class RoomView(QWidget):
                     self.load()
                 except Exception as e:
                     s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
+                    error(self, "Error", str(e))
                 finally:
                     s2.close()
         except Exception as e:
@@ -226,21 +227,21 @@ class RoomView(QWidget):
                 session.close()
             except Exception:
                 pass
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
 
     def delete_room(self, rid=None):
         if rid is None:
             rid = self._selected_id()
         if not rid:
-            QMessageBox.warning(self, "Select", "Please select a room to delete.")
+            warn(self, "Select", "Please select a room to delete.")
             return
-        if QMessageBox.question(self, "Confirm", "Delete this room/lab?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm", "Delete this room/lab?", ok_text="Delete", destructive=True):
             return
         session = get_session()
         try:
             cnt = session.query(TimetableEntry).filter(TimetableEntry.room_id == rid).count()
             if cnt > 0:
-                QMessageBox.critical(self, "Cannot Delete", f"This room has {cnt} scheduled lecture(s). Delete those lectures first.")
+                error(self, "Cannot Delete", f"This room has {cnt} scheduled lecture(s). Delete those lectures first.")
                 return
             room = session.query(Room).filter(Room.id == rid).first()
             if room:
@@ -250,7 +251,7 @@ class RoomView(QWidget):
                 self.load()
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
         finally:
             session.close()
 
@@ -258,7 +259,7 @@ class RoomView(QWidget):
         if rid is None:
             rid = self._selected_id()
         if not rid:
-            QMessageBox.warning(self, "Select", "Please select a room to view timetable.")
+            warn(self, "Select", "Please select a room to view timetable.")
             return
         session = get_session()
         try:

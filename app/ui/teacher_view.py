@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QLineEdit, QDialog, QComboBox, QFormLayout, QDialogButtonBox,
+    QHeaderView, QLineEdit, QDialog, QComboBox, QFormLayout, QDialogButtonBox,
     QTabWidget, QTextEdit, QFrame
 )
 from PySide6.QtCore import Qt
@@ -12,6 +12,7 @@ from app.services.timetable_service import TimetableService
 from app.ui.dialogs import TeacherDialog
 from app.ui.icons import icon
 from app.ui.widgets import page_header, show_toast, style_dialog_buttons
+from app.ui.modals import ask, warn, error
 
 STATUS_OK = ("#166534", "#DCFCE7")
 STATUS_BAD = ("#991B1B", "#FEE2E2")
@@ -163,7 +164,7 @@ class TeacherView(QWidget):
                 self.load()
             except Exception as e:
                 session.rollback()
-                QMessageBox.critical(self, "Error", str(e))
+                error(self, "Error", str(e))
             finally:
                 session.close()
 
@@ -171,7 +172,7 @@ class TeacherView(QWidget):
         if tid is None:
             tid = self._selected_id()
         if not tid:
-            QMessageBox.warning(self, "Select", "Please select a teacher to edit.")
+            warn(self, "Select", "Please select a teacher to edit.")
             return
         session = get_session()
         try:
@@ -193,7 +194,7 @@ class TeacherView(QWidget):
                     self.load()
                 except Exception as e:
                     s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
+                    error(self, "Error", str(e))
                 finally:
                     s2.close()
             return
@@ -202,21 +203,21 @@ class TeacherView(QWidget):
                 session.close()
             except Exception:
                 pass
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
 
     def delete_teacher(self, tid=None):
         if tid is None:
             tid = self._selected_id()
         if not tid:
-            QMessageBox.warning(self, "Select", "Please select a teacher to delete.")
+            warn(self, "Select", "Please select a teacher to delete.")
             return
-        if QMessageBox.question(self, "Confirm", "Delete this teacher? Assigned lectures will prevent deletion if they exist.\n\nDelete?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm", "Delete this teacher? Assigned lectures will prevent deletion if they exist.\n\nDelete?", ok_text="Delete", destructive=True):
             return
         session = get_session()
         try:
             cnt = session.query(TimetableEntry).filter(TimetableEntry.teacher_id == tid).count()
             if cnt > 0:
-                QMessageBox.critical(self, "Cannot Delete", f"This teacher has {cnt} scheduled lecture(s). Delete or reassign those lectures first.")
+                error(self, "Cannot Delete", f"This teacher has {cnt} scheduled lecture(s). Delete or reassign those lectures first.")
                 return
             t = session.query(Teacher).filter(Teacher.id == tid).first()
             if t:
@@ -226,7 +227,7 @@ class TeacherView(QWidget):
                 self.load()
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
         finally:
             session.close()
 
@@ -234,7 +235,7 @@ class TeacherView(QWidget):
         if tid is None:
             tid = self._selected_id()
         if not tid:
-            QMessageBox.warning(self, "Select", "Please select a teacher to view timetable.")
+            warn(self, "Select", "Please select a teacher to view timetable.")
             return
         session = get_session()
         try:

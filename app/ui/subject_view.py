@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QLineEdit, QComboBox, QFrame
+    QHeaderView, QLineEdit, QComboBox, QFrame
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -10,6 +10,7 @@ from app.models import Subject, Semester, Teacher, TimetableEntry
 from app.ui.dialogs import SubjectDialog
 from app.ui.icons import icon
 from app.ui.widgets import page_header, show_toast
+from app.ui.modals import ask, warn, error
 
 TYPE_COLORS = ("#3B4D63", "#E4EAF2")
 
@@ -182,46 +183,33 @@ class SubjectView(QWidget):
             session.close()
 
     def add_subject(self):
+        # Single dialog, single session: no duplicate objects.
+        dlg = SubjectDialog(self)
+        if not dlg.exec():
+            return
+        data = dlg.get_data()
         session = get_session()
         try:
-            dlg = SubjectDialog(self, session=session)
-            dlg2 = SubjectDialog(self)
-            session.close()
-            if dlg2.exec():
-                data = dlg2.get_data()
-                s2 = get_session()
-                try:
-                    exists = s2.query(Subject).filter(Subject.code == data["code"]).first()
-                    if exists:
-                        QMessageBox.critical(self, "Error", f"Subject code {data['code']} already exists.")
-                        return
-                    sub = Subject(**data)
-                    s2.add(sub)
-                    s2.commit()
-                    show_toast(self, "Subject added.")
-                    self.load()
-                except Exception as e:
-                    s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
-                finally:
-                    s2.close()
+            exists = session.query(Subject).filter(Subject.code == data["code"]).first()
+            if exists:
+                error(self, "Error", f"Subject code {data['code']} already exists.")
+                return
+            sub = Subject(**data)
+            session.add(sub)
+            session.commit()
+            show_toast(self, "Subject added.")
+            self.load()
         except Exception as e:
-            try:
-                session.close()
-            except Exception:
-                pass
-            QMessageBox.critical(self, "Error", str(e))
+            session.rollback()
+            error(self, "Error", str(e))
         finally:
-            try:
-                dlg.session.close()
-            except Exception:
-                pass
+            session.close()
 
     def edit_subject(self, sid=None):
         if sid is None:
             sid = self._selected_id()
         if not sid:
-            QMessageBox.warning(self, "Select", "Please select a subject to edit.")
+            warn(self, "Select", "Please select a subject to edit.")
             return
         session = get_session()
         try:
@@ -237,7 +225,7 @@ class SubjectView(QWidget):
                 try:
                     exists = s2.query(Subject).filter(Subject.code == data["code"], Subject.id != sid).first()
                     if exists:
-                        QMessageBox.critical(self, "Error", f"Subject code {data['code']} already exists.")
+                        error(self, "Error", f"Subject code {data['code']} already exists.")
                         return
                     sub2 = s2.query(Subject).filter(Subject.id == sid).first()
                     for k, v in data.items():
@@ -247,11 +235,11 @@ class SubjectView(QWidget):
                     self.load()
                 except Exception as e:
                     s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
+                    error(self, "Error", str(e))
                 finally:
                     s2.close()
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
         finally:
             try:
                 session.close()
@@ -262,15 +250,15 @@ class SubjectView(QWidget):
         if sid is None:
             sid = self._selected_id()
         if not sid:
-            QMessageBox.warning(self, "Select", "Please select a subject to delete.")
+            warn(self, "Select", "Please select a subject to delete.")
             return
-        if QMessageBox.question(self, "Confirm", "Delete this subject?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm", "Delete this subject?", ok_text="Delete", destructive=True):
             return
         session = get_session()
         try:
             cnt = session.query(TimetableEntry).filter(TimetableEntry.subject_id == sid).count()
             if cnt > 0:
-                QMessageBox.critical(self, "Cannot Delete", f"This subject has {cnt} scheduled lecture(s). Delete those lectures first.")
+                error(self, "Cannot Delete", f"This subject has {cnt} scheduled lecture(s). Delete those lectures first.")
                 return
             sub = session.query(Subject).filter(Subject.id == sid).first()
             if sub:
@@ -280,6 +268,6 @@ class SubjectView(QWidget):
                 self.load()
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
         finally:
             session.close()

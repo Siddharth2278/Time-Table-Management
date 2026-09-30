@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QGroupBox, QGridLayout, QFrame
+    QHeaderView, QGroupBox, QGridLayout, QFrame
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -10,6 +10,7 @@ from app.models import TimeSlot, WorkingDay
 from app.ui.dialogs import TimeSlotDialog
 from app.ui.icons import icon
 from app.ui.widgets import Switch, page_header, show_toast
+from app.ui.modals import ask, warn, error
 
 PILL_CLASS = ("#166534", "#DCFCE7")
 PILL_BREAK = ("#92400E", "#FEF3C7")
@@ -115,7 +116,7 @@ class TimeSlotView(QWidget):
             session.commit()
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
         finally:
             session.close()
 
@@ -187,7 +188,7 @@ class TimeSlotView(QWidget):
                 self.load_slots()
             except Exception as e:
                 session.rollback()
-                QMessageBox.critical(self, "Error", str(e))
+                error(self, "Error", str(e))
             finally:
                 session.close()
 
@@ -195,7 +196,7 @@ class TimeSlotView(QWidget):
         if sid is None:
             sid = self._selected_id()
         if not sid:
-            QMessageBox.warning(self, "Select", "Please select a slot to edit.")
+            warn(self, "Select", "Please select a slot to edit.")
             return
         session = get_session()
         try:
@@ -217,7 +218,7 @@ class TimeSlotView(QWidget):
                     self.load_slots()
                 except Exception as e:
                     s2.rollback()
-                    QMessageBox.critical(self, "Error", str(e))
+                    error(self, "Error", str(e))
                 finally:
                     s2.close()
         except Exception as e:
@@ -225,15 +226,15 @@ class TimeSlotView(QWidget):
                 session.close()
             except Exception:
                 pass
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
 
     def delete_slot(self, sid=None):
         if sid is None:
             sid = self._selected_id()
         if not sid:
-            QMessageBox.warning(self, "Select", "Please select a slot to delete.")
+            warn(self, "Select", "Please select a slot to delete.")
             return
-        if QMessageBox.question(self, "Confirm", "Delete this time slot?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        if not ask(self, "Confirm", "Delete this time slot?", ok_text="Delete", destructive=True):
             return
         session = get_session()
         try:
@@ -245,6 +246,6 @@ class TimeSlotView(QWidget):
                 self.load_slots()
         except Exception as e:
             session.rollback()
-            QMessageBox.critical(self, "Error", str(e))
+            error(self, "Error", str(e))
         finally:
             session.close()
