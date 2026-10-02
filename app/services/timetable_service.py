@@ -205,6 +205,24 @@ class TimetableService:
             key=lambda a: (-a["remaining"], a["subject"].code or ""))
         for item in todo:
             subject = item["subject"]
+            try:
+                duration = int(subject.lecture_duration or 60)
+            except (TypeError, ValueError):
+                duration = 60
+            # Time ranges always span exactly the subject duration, so a
+            # 120-minute lab becomes one 09:00-11:00 block.
+            from app.services.intelligence.candidate_generator import (
+                slot_windows_for_duration,
+            )
+            windows = slot_windows_for_duration(slots, duration)
+            if not windows:
+                result["unplaced"].append({
+                    "code": subject.code,
+                    "name": subject.name,
+                    "remaining": item["remaining"],
+                    "reason": f"No {duration}-minute block available in the slot grid.",
+                })
+                continue
             teacher_order = []
             if subject.teacher_id in teacher_ids:
                 teacher_order.append(subject.teacher_id)
@@ -225,7 +243,7 @@ class TimetableService:
                 for day in days:
                     if done:
                         break
-                    for slot in slots:
+                    for start, end in windows:
                         if done:
                             break
                         for teacher_id in teacher_order:
@@ -234,7 +252,7 @@ class TimetableService:
                             for room_id in room_order:
                                 ok, out = TimetableService.create_entry(
                                     session, semester_id, subject.id, teacher_id, room_id,
-                                    day.id, slot.start_time, slot.end_time,
+                                    day.id, start, end,
                                     lecture_type=subject.subject_type or "Theory")
                                 if ok:
                                     placed_here += 1
