@@ -41,3 +41,22 @@ def explain_result(session, reference_name: str, accepted: List[dict],
     lines.append(f"{rejected_count} placement(s) rejected by conflict validation.")
     lines.append("0 conflicts detected.")
     return "\n".join(lines)
+
+
+def pattern_lines(template: dict) -> str:
+    """Factual pattern summary (§15): what structure was transferred."""
+    lines = ["Pattern transferred from reference:"]
+    for role in template.get("roles", []):
+        kind = "practical" if role.get("practical") else role.get("type_class", "theory")
+        if role.get("practical") and role.get("consecutive_block"):
+            shape = "consecutive blocks"
+        else:
+            shape = f"distributed across {role.get('day_count', 0)} days ({role.get('spacing', '-')})"
+        lines.append(
+            f"{role.get('frequency', 0)}/week {kind} subjects → {shape}, "
+            f"prefer {role.get('period_pref', 'mixed')}.")
+    breaks = template.get("breaks", []) or []
+    if breaks:
+        names = ", ".join(f"{b.get('start', '')}-{b.get('end', '')}" for b in breaks)
+        lines.append(f"Break pattern preserved: {names}.")
+    return "\n".join(lines)

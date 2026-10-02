@@ -10,10 +10,13 @@
 """
 from typing import Any, Dict, List
 
-from app.models import Room, Subject
+from app.models import Room, Subject, TimeSlot
 from app.services.conflict_service import ConflictService
-from app.services.intelligence.candidate_generator import generate_candidates
+from app.services.intelligence.candidate_generator import (
+    _fmt, generate_candidates, slot_windows_for_duration,
+)
 from app.services.intelligence.timetable_scorer import score_candidate
+from app.utils.helpers import time_to_minutes
 
 BRANCH_LIMIT = 12
 DEFAULT_BUDGET = 3000
@@ -53,10 +56,15 @@ def _forget(row, session):
 
 def optimize(session, semester_id: int, units: List[dict],
              patterns: Dict[str, Any], day_names: Dict[int, str],
+             roles: Dict[int, dict], template: dict,
+             day_order: Dict[int, int],
              budget: int = DEFAULT_BUDGET) -> Dict[str, Any]:
     """Place lecture units. Returns {accepted, unplaced, validations, complete}."""
     context = _empty_context()
     context["day_names"] = day_names
+    context["day_order"] = day_order
+    context["roles"] = roles
+    context["template"] = template
     accepted: List[dict] = []
     accepted_rows: List[Any] = []
     unplaced: List[dict] = []
@@ -114,14 +122,15 @@ def optimize(session, semester_id: int, units: List[dict],
             pass
         _forget(row, session)
 
-    def dfs(index: int) -> bool:
+    def dfs(index: int, work: List[dict]) -> bool:
         nonlocal best
-        if state["stop"] or index >= len(units):
+        if state["stop"] or index >= len(work):
             return True
-        unit = units[index]
-        candidates = generate_candidates(session, unit["subject"], patterns)
+        unit = work[index]
+        role = roles.get(unit["subject"].id, {})
+        candidates = generate_candidates(session, unit["subject"], patterns, role)
         scored = sorted(
-            ((score_candidate(c, unit["subject"].subject_type, patterns, context),
+            ((score_candidate(c, unit["subject"], role, template, context),
               c["day_id"], c["start_time"], c["teacher_id"], c["room_id"], c)
              for c in candidates),
             key=lambda t: (-t[0], t[1], t[2], t[3], t[4]))
@@ -137,34 +146,105 @@ def optimize(session, semester_id: int, units: List[dict],
                 accepted.append(cand)
                 accepted_rows.append(row)
                 push_context(cand)
+                unit["placed"] = cand
                 if len(accepted) > len(best):
                     best = list(accepted)
-                if dfs(index + 1):
+                if dfs(index + 1, work):
                     return True
                 accepted.pop()
                 accepted_rows.pop()
                 rebuild_context()
                 undo(row)
+                del unit["placed"]
             else:
                 last_reason = reason
         unit["fail_reason"] = last_reason
         return False
 
-    complete = dfs(0)
-    # Leave the transaction holding exactly the best prefix found; the
-    # caller rolls everything back (dry run) or re-validates + commits.
-    # Anything beyond the best prefix never touched the database.
-    final = best if not complete else accepted
-    for pos, unit in enumerate(units):
-        if pos < len(final):
+    # Phase 1: template-directed direct placement (fast path). Each unit
+    # first tries its role's own reference cells with assigned staff, so
+    # structure transfers exactly when constraints allow. Leftovers fall
+    # through to backtracking search.
+    from app.services.intelligence.candidate_generator import _pools
+    day_name_to_id = {name: did for did, name in day_names.items()}
+    slots = session.query(TimeSlot).filter(
+        TimeSlot.is_enabled == True, TimeSlot.is_break == False  # noqa: E712
+    ).order_by(TimeSlot.start_time).all()
+    windows_cache: Dict[int, set] = {}
+    used_cells = set()
+    for unit in units:
+        if state["stop"]:
+            break
+        subject = unit["subject"]
+        role = roles.get(subject.id, {})
+        try:
+            duration = int(subject.lecture_duration or 60)
+        except (TypeError, ValueError):
+            duration = 60
+        if duration not in windows_cache:
+            windows_cache[duration] = set(slot_windows_for_duration(slots, duration))
+        windows = windows_cache[duration]
+        teacher_order, room_order = _pools(session, subject)
+        attempts = 0
+        for day_name in (role.get("days", []) if role else []):
+            if "placed" in unit or attempts >= 24 or state["stop"]:
+                break
+            day_id = day_name_to_id.get(day_name)
+            if day_id is None:
+                continue
+            for start in (role.get("times", []) if role else []):
+                if "placed" in unit or attempts >= 24:
+                    break
+                try:
+                    end = _fmt(time_to_minutes(start) + duration)
+                except (ValueError, AttributeError, TypeError):
+                    continue
+                if (start, end) not in windows:
+                    continue
+                for teacher_id in teacher_order[:2]:
+                    if "placed" in unit:
+                        break
+                    for room_id in room_order[:2]:
+                        if (subject.id, day_id, start) in used_cells:
+                            continue
+                        attempts += 1
+                        cand = {
+                            "subject_id": subject.id, "teacher_id": teacher_id,
+                            "room_id": room_id, "day_id": day_id,
+                            "start_time": start, "end_time": end,
+                            "lecture_type": subject.subject_type or "Theory",
+                        }
+                        try:
+                            ok, reason, row = attempt(cand)
+                        except Exception:
+                            raise
+                        if ok:
+                            accepted.append(cand)
+                            accepted_rows.append(row)
+                            push_context(cand)
+                            unit["placed"] = cand
+                            used_cells.add((subject.id, day_id, start))
+                            if len(accepted) > len(best):
+                                best = list(accepted)
+                            break
+                        unit["fail_reason"] = reason
+                        if attempts >= 24:
+                            break
+    # Phase 2: backtracking search for whatever remains.
+    deferred = [u for u in units if "placed" not in u]
+    if deferred:
+        dfs(0, deferred)
+    complete = all("placed" in u for u in units)
+    # The transaction holds exactly the placed rows; the caller rolls back
+    # (dry run) or re-validates + commits. Anything unplaced never touched it.
+    final = [u["placed"] for u in units if "placed" in u]
+    for unit in units:
+        if "placed" in unit:
             continue
         subject = unit["subject"]
-        if pos == len(final):
-            reason = unit.get("fail_reason", "No valid placement found.")
-        else:
-            reason = "Not attempted: an earlier lecture could not be placed."
         unplaced.append({
-            "code": subject.code, "name": subject.name, "reason": reason,
+            "code": subject.code, "name": subject.name,
+            "reason": unit.get("fail_reason", "No valid placement found."),
         })
     return {"accepted": final, "unplaced": unplaced,
             "validations": state["validations"], "complete": complete}

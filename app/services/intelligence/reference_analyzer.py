@@ -40,9 +40,12 @@ def _shape_profile(entries, semester_label, working_days, slots, breaks):
         info = subjects.setdefault(code, {
             "code": code, "name": (e.get("name") or ""),
             "type": ltype, "duration": duration, "count": 0,
+            "days": [], "times": [],
         })
         info["count"] += 1
         day = e["day"].strip()
+        info["days"].append(day)
+        info["times"].append(e["start"])
         day_dist[day] = day_dist.get(day, 0) + 1
         time_dist[e["start"]] = time_dist.get(e["start"], 0) + 1
         teacher = (e.get("teacher") or "").strip() or "Unknown"
@@ -68,6 +71,9 @@ def _shape_profile(entries, semester_label, working_days, slots, breaks):
             for a, b in zip(ordered, ordered[1:]):
                 if 0 < b - a <= 70:
                     consecutive_practicals += 1
+    for info in subjects.values():
+        info["days"] = sorted(set(info["days"]))
+        info["times"] = sorted(set(info["times"]))
     total = sum(day_dist.values())
     cells = max(1, len(working_days) * max(1, len(slots)))
     loads = sorted(day_dist.values()) if day_dist else [0]

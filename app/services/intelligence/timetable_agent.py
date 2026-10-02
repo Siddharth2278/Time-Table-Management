@@ -10,8 +10,13 @@ from typing import Any, Callable, Dict, List, Optional
 from app.models import Room, Semester, Subject, Teacher, TimeSlot, WorkingDay
 from app.services.conflict_service import ConflictService
 from app.services.intelligence.candidate_generator import generate_candidates
-from app.services.intelligence.generation_result import diff_proposal, explain_result
+from app.services.intelligence.generation_result import (
+    diff_proposal, explain_result, pattern_lines,
+)
 from app.services.intelligence.pattern_extractor import extract_patterns
+from app.services.intelligence.subject_role_mapper import map_roles
+from app.services.intelligence.timetable_template import template_from_profile
+from app.services.intelligence.timetable_scorer import timetable_similarity
 from app.services.intelligence.reference_analyzer import analyze_reference
 from app.services.intelligence.requirement_analyzer import analyze_requirements
 from app.services.intelligence.timetable_optimizer import optimize
@@ -117,6 +122,9 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
     done("constraints")
 
     patterns = extract_patterns(profile)
+    template = template_from_profile(session, profile, ref_sem_id)
+    roles = map_roles([item["subject"] for item in requirements],
+                      template.get("roles", []))
     done("patterns")
 
     existing = _existing_tuples(session, target_sem_id)
@@ -130,14 +138,17 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         session.flush()
     try:
         day_names = {d.id: d.name for d in days}
+        day_order = {d.id: d.sort_order for d in days}
         if mode == "fill":
             units = []
             for item in requirements:
-                units += [{"subject": item["subject"]}] * item["remaining"]
+                # NOTE: distinct dict per lecture; [{"subject": s}] * n would
+                # alias one dict and corrupt per-unit placement tracking.
+                units += [{"subject": item["subject"]} for _ in range(item["remaining"])]
         else:
             units = []
             for item in requirements:
-                units += [{"subject": item["subject"]}] * item["required"]
+                units += [{"subject": item["subject"]} for _ in range(item["required"])]
         # Constrained-first: practicals, then largest remaining, then code.
         counts: Dict[int, int] = {}
         for u in units:
@@ -151,10 +162,12 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         preview_count = 0
         if units:
             preview_count = len(generate_candidates(
-                session, units[0]["subject"], patterns))
+                session, units[0]["subject"], patterns,
+                roles.get(units[0]["subject"].id)))
         done("candidates")
 
-        result = optimize(session, target_sem_id, units, patterns, day_names)
+        result = optimize(session, target_sem_id, units, patterns, day_names,
+                          roles, template, day_order)
         # The optimizer validated every accepted entry through the engine
         # against committed state plus the flushed batch, so the finished
         # set is already authoritative. The finally-block rolls back the
@@ -162,6 +175,7 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         accepted = result["accepted"]
         rejected = [{"subject_id": None, "code": u["code"], "name": u["name"],
                      "reason": u["reason"]} for u in result["unplaced"]]
+        similarity = timetable_similarity(accepted, template, roles, day_names)
         done("validation")
     finally:
         session.rollback()
@@ -171,6 +185,7 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         "mode": mode,
         "target_semester_id": target_sem_id,
         "reference": profile,
+        "template": template,
         "requirements": [{
             "code": item["subject"].code, "name": item["subject"].name,
             "type": item["subject"].subject_type,
@@ -181,7 +196,9 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         "accepted": accepted,
         "rejected": rejected,
         "diff": diff_proposal(existing, accepted),
-        "explanation": explain_result(session, reference_name, accepted, len(rejected)),
+        "explanation": explain_result(session, reference_name, accepted, len(rejected))
+        + "\n\n" + pattern_lines(template),
+        "similarity": similarity,
         "validations": result["validations"],
     }
 
