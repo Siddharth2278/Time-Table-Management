@@ -20,7 +20,6 @@ from app.ui.base_dialog import BaseDialog
 from app.ui.icons import icon
 from app.ui.modals import error as modal_error
 from app.ui.widgets import show_toast
-from app.ui.widgets import show_toast
 
 STAGE_LABELS = {
     "reference": "Reference timetable loaded",
@@ -318,11 +317,13 @@ class IntelligenceDialog(BaseDialog):
             "Unplaced:\n" + "\n".join(lines) if lines else "Unplaced: none.")
         self.explain.setPlainText(result.get("explanation", ""))
         diff = result.get("diff", {})
+        similarity = result.get("similarity", {}) or {}
         self.diff_label.setText(
             f"Mode: {result.get('mode', 'fill')} — "
             f"Current: {diff.get('existing', 0)}, Generated: {diff.get('generated', 0)}, "
             f"Unchanged: {diff.get('unchanged', 0)}, Changed: {diff.get('changed', 0)}, "
-            f"Conflicts: 0, Unplaced: {len(rejected)}."
+            f"Conflicts: 0, Unplaced: {len(rejected)}, "
+            f"Structural similarity: {similarity.get('total', 0.0):.2f}."
             + (" Replace deletes this semester's entries first (after OK only)."
                if result.get("mode") == "replace" else ""))
         reqs = result.get("requirements", [])
