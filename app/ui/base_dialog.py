@@ -54,6 +54,8 @@ class BaseDialog(QDialog):
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setObjectName("SecondaryButton")
         self.cancel_button.setCursor(Qt.PointingHandCursor)
+        # Cancel must never steal the default (Enter is always OK).
+        self.cancel_button.setAutoDefault(False)
         self.cancel_button.clicked.connect(self.reject)
         footer_layout.addWidget(self.cancel_button)
         self.ok_button = QPushButton("OK")

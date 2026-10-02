@@ -49,6 +49,8 @@ class AppModal(QDialog):
             self.cancel_btn = QPushButton("Cancel")
             self.cancel_btn.setObjectName("SecondaryButton")
             self.cancel_btn.setCursor(Qt.PointingHandCursor)
+            # Cancel must never steal the default (Enter is always OK).
+            self.cancel_btn.setAutoDefault(False)
             self.cancel_btn.clicked.connect(self.reject)
             row.addWidget(self.cancel_btn)
         self.ok_btn = QPushButton(ok_text)
@@ -65,6 +67,22 @@ class AppModal(QDialog):
         except Exception:
             pass
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Showing clears the default-button flag (same Qt behavior as in
+        # BaseDialog); re-assert deferred so Enter = OK actually works.
+        try:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._assert_default)
+        except Exception:
+            pass
+
+    def _assert_default(self):
+        try:
+            self.ok_btn.setDefault(True)
+        except Exception:
+            pass
+
 
 def ask(parent, title, description, ok_text="OK", destructive=False) -> bool:
     """Cancel/OK confirmation. Returns True ONLY when OK is pressed."""
@@ -74,9 +92,12 @@ def ask(parent, title, description, ok_text="OK", destructive=False) -> bool:
 
 
 def info(parent, title, description):
-    """Information / success message with a single OK (nothing to decide)."""
+    """Information message with the standardized Cancel + OK footer.
+
+    Both buttons dismiss safely; OK is primary + default (Enter).
+    """
     AppModal(parent, title, description, ok_text="OK",
-             show_cancel=False, destructive=(kind == "error")).exec()
+             show_cancel=True, destructive=False).exec()
 
 
 def warn(parent, title, description):
