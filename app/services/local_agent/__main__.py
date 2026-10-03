@@ -8,6 +8,10 @@ Examples:
     python -m app.services.local_agent generate requirements.json --apply
     python -m app.services.local_agent check-model
     python -m app.services.local_agent clear
+    python -m app.services.local_agent train previous_timetable.csv
+    python -m app.services.local_agent update-training another_timetable.csv
+    python -m app.services.local_agent model-status
+    python -m app.services.local_agent clear-model
 """
 import argparse
 import json
@@ -118,6 +122,58 @@ def _cmd_clear(agent, args):
     return 0
 
 
+def _cmd_train(agent, args):
+    try:
+        report = agent.train_agent(args.files)
+    except LearningError as e:
+        print(f"Error: {e}")
+        return 1
+    print("Training completed.")
+    print(f"Historical files: {len(report.get('files', []))}")
+    print(f"Lectures analyzed: {report.get('lectures', '?')}")
+    print(f"Training samples: {report.get('positives', '?')} positive + "
+          f"{report.get('negatives', '?')} negative")
+    print(f"Model version: {report.get('model_version', '?')}")
+    print("Model saved locally.")
+    return 0
+
+
+def _cmd_update_training(agent, args):
+    try:
+        report = agent.update_training(args.files)
+    except LearningError as e:
+        print(f"Error: {e}")
+        return 1
+    print("Incremental training completed.")
+    print(f"Total lectures: {report.get('lectures', '?')}")
+    print(f"Training samples: {report.get('positives', '?')} positive + "
+          f"{report.get('negatives', '?')} negative")
+    return 0
+
+
+def _cmd_model_status(agent, args):
+    status = agent.model_status()
+    if not status.get("trained"):
+        print("No trained timetable model yet.")
+        print("Train the agent: python -m app.services.local_agent train <files>")
+        return 0
+    print(f"Trained: yes (model v{status.get('model_version', '?')}, "
+          f"features v{status.get('feature_schema', '?')})")
+    print(f"Trained at: {status.get('trained_at', '-')}")
+    print(f"Historical files: {len(status.get('sources', []))}")
+    print(f"Lectures: {status.get('lectures', '-')}, "
+          f"samples: {status.get('positives', '-')}+{status.get('negatives', '-')}")
+    print(f"Train accuracy: {status.get('train_accuracy', '-')}, "
+          f"separation: {status.get('separation', '-')}")
+    return 0
+
+
+def _cmd_clear_model(agent, args):
+    removed = agent.clear_model()
+    print("Trained model cleared." if removed else "No trained model stored.")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="python -m app.services.local_agent",
@@ -142,6 +198,12 @@ def main(argv=None):
     gen_parser.add_argument("--template-only", action="store_true",
                             help="Skip the local model and use template patterns only")
     sub.add_parser("clear", help="Delete the stored profile")
+    train_parser = sub.add_parser("train", help="Train the local timetable model")
+    train_parser.add_argument("files", nargs="+", help="CSV, XLSX or JSON timetables")
+    update_parser = sub.add_parser("update-training", help="Incrementally train on more files")
+    update_parser.add_argument("files", nargs="+", help="CSV, XLSX or JSON timetables")
+    sub.add_parser("model-status", help="Show trained model status")
+    sub.add_parser("clear-model", help="Delete the trained model")
     args = parser.parse_args(argv)
     agent = _agent(args)
     try:
@@ -155,6 +217,14 @@ def main(argv=None):
             return _cmd_check_model(agent, args)
         if args.command == "clear":
             return _cmd_clear(agent, args)
+        if args.command == "train":
+            return _cmd_train(agent, args)
+        if args.command == "update-training":
+            return _cmd_update_training(agent, args)
+        if args.command == "model-status":
+            return _cmd_model_status(agent, args)
+        if args.command == "clear-model":
+            return _cmd_clear_model(agent, args)
     except LearningError as e:
         print(f"Error: {e}")
         return 1

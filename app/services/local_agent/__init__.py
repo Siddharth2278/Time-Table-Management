@@ -10,6 +10,9 @@ Layers, kept distinct by design:
 """
 from app.services.local_agent.agent import TimetableAgent
 from app.services.local_agent.model_client import DEFAULT_ENDPOINT, OllamaClient
+from app.services.local_agent.model_store import (
+    clear_model, load_model, model_status,
+)
 from app.services.local_agent.pattern_store import (
     clear_profile, load_profile, save_profile, update_profile,
 )
@@ -28,8 +31,9 @@ from app.services.local_agent.timetable_learner import learn, load_rows
 __all__ = [
     "DEFAULT_ENDPOINT", "GenerationResult", "LearningError", "OllamaClient",
     "PROFILE_FILENAME", "PROFILE_VERSION", "PlanPlacement", "TimetableAgent",
-    "build_plan_prompt", "clear_profile", "collect_requirements", "learn",
-    "learned_to_reference", "load_profile", "load_rows",
-    "map_requirements_to_roles", "parse_plan", "plan_to_bias",
+    "build_plan_prompt", "clear_model", "clear_profile",
+    "collect_requirements", "learn",
+    "learned_to_reference", "load_model", "load_profile", "load_rows",
+    "map_requirements_to_roles", "model_status", "parse_plan", "plan_to_bias",
     "request_plan", "save_profile", "update_profile",
 ]

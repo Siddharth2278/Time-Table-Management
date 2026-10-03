@@ -103,14 +103,192 @@ class TimetableAgent:
             "skipped_rows": total_skipped,
         }
 
+    def train_agent(self, file_paths: List[str]) -> Dict[str, Any]:
+        """Train (or replace-train) the fitted local model from files.
+
+        Builds supervised examples, fits the classifier, validates it,
+        reloads it from disk to prove persistence, and only then reports
+        success. Previous working model is replaced atomically at the end.
+        """
+        from app.services.local_agent import model_store
+        from app.services.local_agent.training_dataset import load_files_as_dicts
+        if not file_paths:
+            raise LearningError("No timetable files given to train from.")
+        rows, skipped, per_file = load_files_as_dicts(file_paths)
+        if not rows:
+            raise LearningError("No usable lecture rows found for training.")
+        report = model_store.train_from_rows(
+            rows, source_label=", ".join(str(p) for p in file_paths),
+            data_dir=self._data_dir, replace=True)
+        report["files"] = [str(p) for p in file_paths]
+        report["skipped_rows"] = skipped
+        report["per_file"] = per_file
+        self._verify_persisted_model(report)
+        self.clear_learning_profile()
+        self.learn_files(file_paths)
+        return report
+
+    def update_training(self, file_paths: List[str]) -> Dict[str, Any]:
+        """Incremental training: append files to stored rows and retrain."""
+        from app.services.local_agent import model_store
+        from app.services.local_agent.training_dataset import load_files_as_dicts
+        if not file_paths:
+            raise LearningError("No timetable files given to train from.")
+        rows, skipped, per_file = load_files_as_dicts(file_paths)
+        if not rows:
+            raise LearningError("No usable lecture rows found for training.")
+        report = model_store.train_from_rows(
+            rows, source_label=", ".join(str(p) for p in file_paths),
+            data_dir=self._data_dir, replace=False)
+        report["files"] = [str(p) for p in file_paths]
+        report["skipped_rows"] = skipped
+        report["per_file"] = per_file
+        self._verify_persisted_model(report)
+        self.learn_files(file_paths)
+        return report
+
+    def _verify_persisted_model(self, report: Dict[str, Any]):
+        """Reload from disk and score one row: proves the saved model works."""
+        from app.services.local_agent import model_store
+        from app.services.local_agent.training_dataset import FEATURES_V1
+        model, metadata = model_store.load_model(self._data_dir)
+        if metadata.get("trained_at") != report.get("trained_at"):
+            raise LearningError("Persisted model metadata does not match training.")
+        scores = model_store.score_candidates(model, [[0.0] * len(FEATURES_V1)])
+        if len(scores) != 1:
+            raise LearningError("Persisted model failed a prediction check.")
+        report["reload_check"] = True
+
+    def model_status(self) -> Dict[str, Any]:
+        """Training status of the fitted local model."""
+        from app.services.local_agent import model_store
+        return model_store.model_status(self._data_dir)
+
+    def clear_model(self) -> bool:
+        """Remove the fitted model, metadata and stored training rows."""
+        from app.services.local_agent import model_store
+        return model_store.clear_model(self._data_dir)
+
+    def _bias_from_trained_model(self, session, requirements: Dict[str, Any],
+                                 learned: Dict[str, Any]) -> Dict[tuple, int]:
+        """Score candidate cells with the fitted model → ranked bias.
+
+        For each subject needing lectures: map to its learned role, score
+        every valid (day, window) cell with assigned staff context, keep
+        the top cells as ranks 1..N. The solver still validates everything.
+        """
+        from app.services.local_agent import model_store
+        from app.services.intelligence.candidate_generator import (
+            slot_windows_for_duration,
+        )
+        from app.models import TimeSlot, WorkingDay
+        model, _metadata = model_store.load_model(self._data_dir)
+        roles = learned.get("roles", {}) or {}
+        patterns = learned.get("patterns", {}) or {}
+        teacher_load = patterns.get("teacher_workload", {}) or {}
+        room_load = patterns.get("room_usage", {}) or {}
+        teacher_total = max(1, sum(teacher_load.values()))
+        room_total = max(1, sum(room_load.values()))
+        days = session.query(WorkingDay).filter(
+            WorkingDay.is_enabled == True).order_by(WorkingDay.sort_order).all()  # noqa: E712
+        slots = session.query(TimeSlot).filter(
+            TimeSlot.is_enabled == True, TimeSlot.is_break == False  # noqa: E712
+        ).order_by(TimeSlot.start_time).all()
+        day_names = {d.id: d.name for d in days}
+        day_load_now: Dict[int, int] = {}
+        bias: Dict[tuple, int] = {}
+        for item in requirements.get("subjects", []):
+            if item["required"] <= 0:
+                continue
+            role = self._match_learned_role(item, roles)
+            if not role:
+                continue
+            windows = slot_windows_for_duration(slots, item["duration"])
+            if not windows:
+                continue
+            scored = []
+            for day in days:
+                for start, end in windows:
+                    features = self._inference_features(
+                        item, role, day, start, day_names, day_load_now,
+                        teacher_load, teacher_total, room_load, room_total)
+                    scored.append((day.name, start, features))
+            try:
+                scores = model_store.score_candidates(
+                    model, [features for _, _, features in scored])
+            except LearningError:
+                continue
+            ranked = sorted(zip(scored, scores),
+                            key=lambda t: (-t[1], t[0][0], t[0][1]))
+            for rank, ((day_name, start, _features), _score) in enumerate(ranked[:12], start=1):
+                key = (item["id"], day_name, start)
+                if key not in bias or rank < bias[key]:
+                    bias[key] = rank
+        return bias
+
+    @staticmethod
+    def _match_learned_role(item: Dict[str, Any], roles: Dict[str, dict]) -> dict:
+        """Map a required subject onto a learned role (shape, never names)."""
+        cls = "practical" if (item.get("type") or "Theory") != "Theory" else "theory"
+        duration = item.get("duration", 60)
+        required = item.get("required", 0)
+        best = None
+        best_cost = None
+        for key in sorted(roles):
+            role = roles[key]
+            cost = (abs(role.get("frequency", 0) - required) * 10
+                    + (0 if role.get("type") == cls else 6)
+                    + abs(int(role.get("duration", 60) or 60) - duration) / 30.0)
+            if best_cost is None or cost < best_cost:
+                best_cost = cost
+                best = role
+        return best or {}
+
+    @staticmethod
+    def _inference_features(item, role, day, start, day_names, day_load_now,
+                            teacher_load, teacher_total, room_load, room_total):
+        """Structural feature vector for one candidate (inference context)."""
+        from app.services.local_agent.training_dataset import extract_features
+        from app.utils.helpers import time_to_minutes
+        try:
+            start_min = time_to_minutes(start)
+        except (ValueError, AttributeError, TypeError):
+            start_min = 9 * 60
+        try:
+            duration = int(item.get("duration", 60) or 60)
+        except (TypeError, ValueError):
+            duration = 60
+        role_stats = {
+            "type_practical": 1 if role.get("type") == "practical" else 0,
+            "duration": duration,
+            "frequency": item.get("required", 0),
+            "avg_gap": role.get("avg_gap", 0.0),
+            "morning_share": role.get("morning_share", 0.5),
+            "day_count": max(1, int(round(role.get("avg_day_count", 0) or 0))),
+            "day_names": list(role.get("preferred_days", []) or []),
+            "times": list(role.get("preferred_times", []) or []),
+        }
+        return extract_features(role_stats, day.sort_order, start_min, {
+            "day_load": dict(day_load_now),
+            "teacher_share": 0.0,
+            "room_share": 0.0,
+            "placed_days": [],
+            "day_order": {},
+            "position_in_day": 0.5,
+            "gap_from_break": 1.0,
+        }, day_name=day.name, start_str=start)
+
     def generate_dry_run(self, session, semester_id: int, mode: str = "fill",
                          model: Optional[str] = None,
                          progress=None, avoid: set | None = None,
                          previous_failures: List[str] | None = None,
-                         use_model_plan: bool = True) -> GenerationResult:
-        """Plan (local model) + solve (existing engine). Writes NOTHING.
+                         use_model_plan: bool = True,
+                         planner: str = "template") -> GenerationResult:
+        """Plan + solve (existing engine). Writes NOTHING.
 
-        use_model_plan=False runs the template-only path (same solver).
+        planner: "template" (deterministic patterns), "local" (Ollama
+        preference plan) or "trained" (fitted local model scores).
+        use_model_plan=False forces the template path (same solver).
         """
         from app.services.intelligence.timetable_agent import run_intelligence
         learned = self.get_learning_profile()
@@ -119,14 +297,17 @@ class TimetableAgent:
         bias: Dict[tuple, int] = {}
         dropped: List[str] = []
         model_notes = ""
-        planner = "template"
-        if use_model_plan:
+        planner_name = "template"
+        if planner == "trained":
+            bias = self._bias_from_trained_model(session, requirements, learned)
+            planner_name = "trained-local-model"
+        elif use_model_plan:
             client = self._client()
             prompt = build_plan_prompt(requirements, learned, previous_failures)
             raw = request_plan(client, model or client.model, prompt)
             placements, dropped, model_notes = parse_plan(raw, requirements)
             bias = plan_to_bias(placements)
-            planner = f"local-model ({model or client.model})"
+            planner_name = f"local-model ({model or client.model})"
         out = run_intelligence(session, semester_id, 0, mode, progress,
                                ref_profile=converted, plan=bias or None,
                                avoid=avoid)
@@ -147,7 +328,7 @@ class TimetableAgent:
                 "sources": learned.get("sources", []),
                 "lectures": learned.get("total_lectures", 0),
                 "roles": len(learned.get("roles", {}) or {}),
-                "planner": planner,
+                "planner": planner_name,
                 "model_notes": model_notes,
             },
             stats={
@@ -163,14 +344,15 @@ class TimetableAgent:
                  model: Optional[str] = None, progress=None,
                  avoid: set | None = None,
                  previous_failures: List[str] | None = None,
-                 use_model_plan: bool = True) -> GenerationResult:
+                 use_model_plan: bool = True,
+                 planner: str = "template") -> GenerationResult:
         """Self-contained dry run (own session, always rolled back)."""
         from app.database import get_session
         session = get_session()
         try:
             return self.generate_dry_run(
                 session, semester_id, mode, model, progress, avoid,
-                previous_failures, use_model_plan)
+                previous_failures, use_model_plan, planner)
         finally:
             try:
                 session.close()
@@ -179,19 +361,23 @@ class TimetableAgent:
 
     def regenerate(self, semester_id: int, previous: GenerationResult,
                    mode: str = "fill", model: Optional[str] = None,
-                   progress=None, session=None) -> GenerationResult:
+                   progress=None, session=None,
+                   planner: str = "template") -> GenerationResult:
         """New candidate from the same profile: avoids previous cells and
         feeds previous failure reasons back into the model prompt."""
         avoid = {(e["subject_id"], e["day_id"], e["start_time"])
                  for e in (previous.accepted or [])}
         failures = [str(r.get("reason", "")) for r in (previous.rejected or [])]
         failures += [str(r.get("reason", "")) for r in (previous.unplaced or [])]
+        use_model = planner == "local"
         if session is None:
             return self.generate(semester_id, mode, model, progress, avoid,
-                                 [f for f in failures if f], True)
+                                 [f for f in failures if f], use_model,
+                                 planner)
         return self.generate_dry_run(session, semester_id, mode, model,
                                      progress, avoid,
-                                     [f for f in failures if f], True)
+                                     [f for f in failures if f], use_model,
+                                     planner)
 
     def apply_generation(self, semester_id: int, result: GenerationResult,
                          mode: str = "fill", session=None) -> Dict[str, int]:
