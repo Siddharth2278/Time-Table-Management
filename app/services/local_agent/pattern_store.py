@@ -84,6 +84,13 @@ def update_profile(new_profile: Dict[str, Any],
         else:
             subjects[s["code"]] = dict(s)
 
+    def _add_counters(*maps):
+        merged: Dict[str, int] = {}
+        for mapping in maps:
+            for key, value in (mapping or {}).items():
+                merged[key] = merged.get(key, 0) + int(value or 0)
+        return merged
+
     roles: Dict[str, dict] = {}
     for key in set(current.get("roles", {})) | set(new_profile.get("roles", {})):
         old = current.get("roles", {}).get(key, {})
@@ -112,14 +119,9 @@ def update_profile(new_profile: Dict[str, Any],
                  + new.get("adjacent_pair_rate", 0) * new_n) / denom, 3),
             "avg_gap": round(sum(merged_gaps) / len(merged_gaps), 2) if merged_gaps else 0.0,
             "gaps": merged_gaps,
+            "day_counts": _add_counters(old.get("day_counts"), new.get("day_counts")),
+            "time_counts": _add_counters(old.get("time_counts"), new.get("time_counts")),
         }
-
-    def _add_counters(*maps):
-        merged: Dict[str, int] = {}
-        for mapping in maps:
-            for key, value in (mapping or {}).items():
-                merged[key] = merged.get(key, 0) + int(value or 0)
-        return merged
 
     old_patterns = current.get("patterns", {})
     new_patterns = new_profile.get("patterns", {})

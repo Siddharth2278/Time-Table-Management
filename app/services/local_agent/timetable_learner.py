@@ -257,6 +257,8 @@ def learn(rows: List[LectureRow], source_label: str = "") -> Dict[str, Any]:
             "avg_day_count": round(sum(day_counts) / len(day_counts), 2),
             "preferred_days": _ranked(stat["day_votes"]),
             "preferred_times": _ranked(stat["time_votes"]),
+            "day_counts": dict(sorted(stat["day_votes"].items())),
+            "time_counts": dict(sorted(stat["time_votes"].items())),
             "morning_share": round(stat["morning"] / max(1, stat["morning"] + stat["afternoon"]), 3),
             "adjacent_pair_rate": round(
                 stat["adjacent_pairs"] / max(1, stat["pairs_seen"]), 3),
