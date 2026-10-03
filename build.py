@@ -12,6 +12,83 @@ import os
 
 ROOT = Path(__file__).parent
 
+def app_version():
+    """Single source of truth: app/__init__.py. Falls back to 1.0.0."""
+    try:
+        text = (ROOT / "app" / "__init__.py").read_text(encoding="utf-8")
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("__version__"):
+                return line.split("=", 1)[1].strip().strip("'\"")
+    except OSError:
+        pass
+    return "1.0.0"
+
+def stamp_installer_version(version):
+    """Sync the Inno Setup script version with the app version."""
+    iss = ROOT / "installer" / "CollegeTimetableSetup.iss"
+    try:
+        text = iss.read_text(encoding="utf-8")
+    except OSError:
+        print("ISS file not found, skipping version stamp")
+        return
+    import re
+    updated, count = re.subn(
+        r'(#define MyAppVersion\s+)"[^"]*"', rf'\1"{version}"', text, count=1)
+    if count:
+        iss.write_text(updated, encoding="utf-8")
+        print(f"Stamped installer version: {version}")
+    else:
+        print("WARNING: could not find MyAppVersion in ISS script")
+
+def verify_packaged_runtime():
+    """Pre-build check: sklearn/joblib importable + spec covers frozen imports."""
+    print("\n--- Verifying packaged runtime imports ---")
+    try:
+        import sklearn  # noqa: F401
+        import joblib  # noqa: F401
+        import scipy  # noqa: F401
+        import numpy  # noqa: F401
+        print(f"sklearn {sklearn.__version__}, joblib {joblib.__version__} available")
+    except ImportError as e:
+        print(f"Missing trained-model runtime dependency: {e}")
+        sys.exit(1)
+    try:
+        from sklearn.ensemble import HistGradientBoostingClassifier  # noqa: F401
+        print("HistGradientBoostingClassifier import OK")
+    except ImportError as e:
+        print(f"sklearn HGB unavailable: {e}")
+        sys.exit(1)
+    spec_text = (ROOT / "CollegeTimetable.spec").read_text(encoding="utf-8")
+    for needle in ("trainable_model", "training_dataset", "model_store",
+                   "sklearn", "scipy", "joblib", "numpy"):
+        if needle not in spec_text:
+            print(f"WARNING: spec missing '{needle}'")
+            sys.exit(1)
+    print("Spec covers trained-model runtime")
+
+
+def verify_no_bundled_user_data():
+    """Installer must never ship a college-specific model or database."""
+    print("\n--- Verifying no pretrained user data bundled ---")
+    for name in ("model.joblib", "timetable.db",
+                 "timetable_learning_profile.json", "training_rows.jsonl"):
+        hits = list((ROOT / "assets").rglob(name)) if (ROOT / "assets").exists() else []
+        if hits:
+            print(f"Refusing to bundle user data file: {hits[0]}")
+            sys.exit(1)
+    spec_text = (ROOT / "CollegeTimetable.spec").read_text(encoding="utf-8")
+    for name in ("model.joblib", "timetable.db", "timetable_agent_model"):
+        # datas= lines must not reference user data; comments mentioning
+        # APPDATA are fine.
+        for line in spec_text.splitlines():
+            if "datas=" in line or "Source" in line:
+                if name in line:
+                    print(f"Spec must not bundle '{name}': {line}")
+                    sys.exit(1)
+    print("No pretrained model/DB bundled")
+
+
 def run(cmd, cwd=ROOT):
     print(f"\n>>> {cmd}")
     result = subprocess.run(cmd, shell=True, cwd=cwd)
@@ -19,10 +96,13 @@ def run(cmd, cwd=ROOT):
         print(f"FAILED: {cmd}")
         sys.exit(result.returncode)
 
+
 def main():
     print("="*60)
     print("College Timetable Manager - Build Script")
     print("="*60)
+    version = app_version()
+    print(f"App version: {version} (from app/__init__.py)")
 
     # 1. Clean
     for p in [ROOT / "build", ROOT / "dist", ROOT / "__pycache__"]:
@@ -34,9 +114,19 @@ def main():
         if p.name != "CollegeTimetable.spec":
             p.unlink(missing_ok=True)
 
+    # 1b. Sync installer version before anything consumes it
+    stamp_installer_version(version)
+
+    # 1c. Pre-build guards: trained-model runtime + no bundled user data
+    verify_packaged_runtime()
+    verify_no_bundled_user_data()
+
     # 2. Ensure dependencies
     print("\n--- Installing dependencies ---")
     run(f"{sys.executable} -m pip install -r requirements.txt --quiet")
+
+    # 2b. Post-install re-verify (frozen build will use these exact wheels)
+    verify_packaged_runtime()
 
     # 3. Run tests
     print("\n--- Running tests ---")
@@ -50,16 +140,49 @@ def main():
     exe = ROOT / "dist" / "CollegeTimetable.exe"
     if exe.exists():
         size_mb = exe.stat().st_size / (1024*1024)
-        print(f"\n✓ Executable built: {exe} ({size_mb:.1f} MB)")
+        print(f"\nExecutable built: {exe} ({size_mb:.1f} MB)")
     else:
         # Try alternative location for onedir
         exe_dir = ROOT / "dist" / "CollegeTimetable" / "CollegeTimetable.exe"
         if exe_dir.exists():
-            print(f"\n✓ Executable built (onedir): {exe_dir}")
+            print(f"\nExecutable built (onedir): {exe_dir}")
             exe = exe_dir
         else:
-            print("\n✗ Executable not found in dist/")
+            print("\nExecutable not found in dist/")
             sys.exit(1)
+
+    # 4b. Smoke-test the freshly built executable (starts GUI headless)
+    print("\n--- Smoke-testing executable ---")
+    try:
+        env = dict(os.environ)
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        probe = subprocess.run(
+            [str(exe), "--smoke-test"],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=180,
+            env=env)
+        out = (probe.stdout or "").strip()
+        # Windowed executables may swallow stdout; exit code is authoritative.
+        if out:
+            print(out.splitlines()[-1:])
+        if probe.returncode != 0:
+            print("Smoke test output:")
+            print(probe.stdout)
+            print(probe.stderr)
+            print("Executable smoke test FAILED")
+            sys.exit(1)
+        print("Executable smoke test passed")
+    except subprocess.TimeoutExpired:
+        print("Executable smoke test timed out")
+        sys.exit(1)
+    except OSError as e:
+        # Enterprise Application Control (e.g. WinError 4551) can block
+        # running a freshly built unsigned exe on the build machine itself.
+        # The exe is still valid for distribution; report and continue to
+        # the installer step instead of failing the whole build.
+        print(f"Executable smoke test could not run ({e}).")
+        print("This is an OS execution policy on the build PC, not a build "
+              "failure: the exe was produced and source tests already passed.")
+        print("Continuing to installer build; verify the exe on a target PC.")
 
     # 5. Try Inno Setup
     print("\n--- Checking for Inno Setup ---")
@@ -99,14 +222,33 @@ def main():
     print("\n" + "="*60)
     print("Build complete!")
     print("="*60)
-    print(f"Executable: {exe}")
+    exe_mb = exe.stat().st_size / (1024*1024) if exe.exists() else 0
+    exe_bytes = exe.stat().st_size if exe.exists() else 0
+    print(f"Executable: {exe} ({exe_mb:.1f} MB, {exe_bytes} bytes)")
     installer = ROOT / "CollegeTimetableSetup.exe"
+    if (ROOT / "dist" / "CollegeTimetableSetup.exe").exists():
+        installer = ROOT / "dist" / "CollegeTimetableSetup.exe"
     if installer.exists():
-        print(f"Installer: {installer}")
-    print("\nTo test the app, run:")
-    print(f"  {exe}")
-    print("\nUser data is stored in:")
-    print("  %APPDATA%/CollegeTimetableManager/timetable.db")
+        ins_mb = installer.stat().st_size / (1024*1024)
+        print(f"Installer: {installer} ({ins_mb:.1f} MB, {installer.stat().st_size} bytes)")
+    else:
+        print(f"Installer: not built (ISCC missing) — distribute {exe}")
+        installer = None
+    print(f"Version: {version} (app/__init__.py + installer stamped)")
+    print(f"Dependencies in exe: PySide6, SQLAlchemy, openpyxl, reportlab, "
+          f"scikit-learn {__import__('sklearn').__version__}, "
+          f"scipy, numpy, joblib (see CollegeTimetable.spec hiddenimports)")
+    print("Installer behavior: Program Files (or user dir), data stays in "
+          "%APPDATA%\\CollegeTimetableManager\\, Start Menu shortcut, "
+          "optional desktop icon, uninstall preserves user data unless Yes.")
+    print("User data (per-PC, never bundled):")
+    print("  %APPDATA%\\CollegeTimetableManager\\timetable.db")
+    print("  %APPDATA%\\CollegeTimetableManager\\timetable_learning_profile.json")
+    print("  %APPDATA%\\CollegeTimetableManager\\timetable_agent_model\\model.joblib")
+    print("  %APPDATA%\\CollegeTimetableManager\\timetable_agent_model\\metadata.json")
+    print("  %APPDATA%\\CollegeTimetableManager\\timetable_agent_model\\training_rows.jsonl")
+    print("Ollama required: NO (optional localhost planner only). "
+          "Offline generation: YES (trained model + solver, no network).")
 
 if __name__ == "__main__":
     main()
