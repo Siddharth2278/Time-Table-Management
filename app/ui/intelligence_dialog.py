@@ -16,6 +16,7 @@ from app.services.intelligence.reference_analyzer import analyze_reference
 from app.services.intelligence.timetable_agent import (
     STAGES, IntelligenceError, apply_result, run_intelligence,
 )
+from app.services.local_agent.schemas import LearningError as AgentError
 from app.ui.base_dialog import BaseDialog
 from app.ui.icons import icon
 from app.ui.modals import error as modal_error
@@ -37,21 +38,48 @@ class _Worker(QThread):
     done_ok = Signal(dict)
     failed = Signal(str)
 
-    def __init__(self, target_id, ref_id, mode, ref_profile=None):
+    def __init__(self, target_id, ref_id, mode, ref_profile=None,
+                 planner="template", model=None, avoid=None):
         super().__init__()
         self._target_id = target_id
         self._ref_id = ref_id
         self._mode = mode
         self._ref_profile = ref_profile
+        self._planner = planner
+        self._model = model
+        self._avoid = avoid
 
     def run(self):
         session = get_session()
         try:
-            out = run_intelligence(session, self._target_id, self._ref_id,
-                                   self._mode, progress=self.progressed.emit,
-                                   ref_profile=self._ref_profile)
-            self.done_ok.emit(out)
-        except IntelligenceError as e:
+            if self._planner == "local":
+                from app.services.local_agent.agent import TimetableAgent
+                agent = TimetableAgent()
+                result = agent.generate_dry_run(
+                    session, self._target_id, self._mode, self._model,
+                    progress=self.progressed.emit, avoid=self._avoid)
+                self.done_ok.emit({
+                    "accepted": result.accepted,
+                    "rejected": result.rejected,
+                    "diff": result.stats.get("diff", {}),
+                    "explanation": (
+                        f"Planner: {result.profile_info.get('planner', '')}\n"
+                        f"Profile: {result.profile_info.get('lectures', 0)} lectures, "
+                        f"{result.profile_info.get('roles', 0)} roles "
+                        f"from {len(result.profile_info.get('sources', []))} file(s).\n"
+                        f"Model notes: {result.profile_info.get('model_notes', '')}\n"
+                        f"Structural similarity: {result.structural_similarity:.2f}."
+                    ),
+                    "similarity": {"total": result.structural_similarity},
+                    "requirements": [],
+                    "mode": self._mode,
+                })
+            else:
+                out = run_intelligence(session, self._target_id, self._ref_id,
+                                       self._mode, progress=self.progressed.emit,
+                                       ref_profile=self._ref_profile)
+                self.done_ok.emit(out)
+        except (IntelligenceError, AgentError) as e:
             self.failed.emit(str(e))
         except Exception:
             self.failed.emit("Unexpected failure. Nothing was changed.")
@@ -60,6 +88,29 @@ class _Worker(QThread):
                 session.close()
             except Exception:
                 pass
+
+
+class _ProbeThread(QThread):
+    probed = Signal(dict)
+
+    def __init__(self, model=None):
+        super().__init__()
+        self._model = model
+
+    def run(self):
+        from app.services.local_agent.agent import TimetableAgent
+        try:
+            agent = TimetableAgent()
+            client = agent._client()
+            client.timeout = 3
+            running = client.is_running()
+            available = client.is_model_available(self._model) if running else False
+            self.probed.emit({"running": running, "available": available,
+                              "endpoint": client.endpoint,
+                              "model": self._model or client.model})
+        except Exception:
+            self.probed.emit({"running": False, "available": False,
+                              "endpoint": "", "model": self._model or ""})
 
 
 class IntelligenceDialog(BaseDialog):
@@ -95,6 +146,20 @@ class IntelligenceDialog(BaseDialog):
         grid.addWidget(self.mode_fill)
         grid.addWidget(self.mode_fresh)
         grid.addWidget(self.mode_replace)
+        planner_row = QHBoxLayout()
+        planner_row.addWidget(QLabel("Planner:"))
+        self.planner_template = QRadioButton("Template patterns (offline)")
+        self.planner_template.setChecked(True)
+        self.planner_local = QRadioButton("Local model plan")
+        self.planner_local.toggled.connect(self._refresh_model_status)
+        planner_row.addWidget(self.planner_template)
+        planner_row.addWidget(self.planner_local)
+        planner_row.addStretch()
+        grid.addLayout(planner_row)
+        self.model_status = QLabel("Local model: not checked.")
+        self.model_status.setObjectName("Muted")
+        self.model_status.setWordWrap(True)
+        grid.addWidget(self.model_status)
         self.body_layout.addWidget(top)
 
         self.ref_summary = QLabel("")
@@ -123,7 +188,17 @@ class IntelligenceDialog(BaseDialog):
         self.generate_btn.setIcon(icon("sparkles", "#FFFFFF", 16))
         self.generate_btn.setCursor(Qt.PointingHandCursor)
         self.generate_btn.clicked.connect(self._start)
-        self.body_layout.addWidget(self.generate_btn)
+        gen_row = QHBoxLayout()
+        gen_row.addStretch()
+        gen_row.addWidget(self.generate_btn)
+        self.regen_btn = QPushButton("Regenerate")
+        self.regen_btn.setObjectName("SecondaryButton")
+        self.regen_btn.setCursor(Qt.PointingHandCursor)
+        self.regen_btn.setToolTip("Generate a different candidate from the same profile.")
+        self.regen_btn.setEnabled(False)
+        self.regen_btn.clicked.connect(self._regenerate)
+        gen_row.addWidget(self.regen_btn)
+        self.body_layout.addLayout(gen_row)
 
         self.result_box = QGroupBox("PROPOSAL PREVIEW")
         result_layout = QVBoxLayout(self.result_box)
@@ -153,6 +228,11 @@ class IntelligenceDialog(BaseDialog):
 
         self._load_references()
         self.ok_button.setEnabled(False)
+        self._model_state = {"running": False, "available": False,
+                             "endpoint": "", "model": ""}
+        self._probe = None
+        self._last_accepted = []
+        self._refresh_model_status()
 
     # ---- setup ---------------------------------------------------------
     def _semester_name(self, semester_id):
@@ -255,19 +335,38 @@ class IntelligenceDialog(BaseDialog):
             return "fresh"
         return "fill"
 
-    def _start(self):
+    def _start(self, regenerate=False):
         ref_id = self.ref_combo.currentData()
         if ref_id is None:
             modal_error(self, "Intelligence", "Select a reference timetable first.")
             return
+        use_local = self.planner_local.isChecked()
+        if use_local and not self._model_state.get("available", False):
+            modal_error(self, "Local Model Unavailable",
+                        "The local model is unavailable.\n\n"
+                        f"Endpoint: {self._model_state.get('endpoint', '') or 'not checked'}\n"
+                        "Start Ollama on this PC with `ollama serve`, then pull a "
+                        "model once with e.g. `ollama pull llama3.1`.\n\n"
+                        "No account or API key is ever needed. Meanwhile, "
+                        "Template patterns generation below keeps working fully offline.")
+            return
         self._result = None
         self.result_box.setVisible(False)
         self.ok_button.setEnabled(False)
+        self.regen_btn.setEnabled(False)
         for label in self._stage_labels.values():
             label.setText("Waiting")
         self.generate_btn.setEnabled(False)
         ref_profile = self._external["profile"] if self._external else None
-        self._worker = _Worker(self._target_id, ref_id, self._mode(), ref_profile)
+        if regenerate and self._last_accepted:
+            avoid = {(e["subject_id"], e["day_id"], e["start_time"])
+                     for e in self._last_accepted}
+        else:
+            avoid = None
+        self._worker = _Worker(
+            self._target_id, ref_id, self._mode(), ref_profile,
+            planner="local" if use_local else "template",
+            model=None, avoid=avoid)
         self._worker.progressed.connect(self._mark_stage)
         self._worker.done_ok.connect(self._on_done)
         self._worker.failed.connect(self._on_failed)
@@ -281,9 +380,39 @@ class IntelligenceDialog(BaseDialog):
     def _on_done(self, result):
         self.generate_btn.setEnabled(True)
         self._result = result
+        self._last_accepted = list(result.get("accepted", []))
         self._fill_preview(result)
         self.result_box.setVisible(True)
         self.ok_button.setEnabled(len(result.get("accepted", [])) > 0)
+        self.regen_btn.setEnabled(len(result.get("accepted", [])) > 0)
+
+    def _regenerate(self):
+        self._start(regenerate=True)
+
+    def _refresh_model_status(self):
+        try:
+            if self._probe is not None and self._probe.isRunning():
+                return
+        except Exception:
+            pass
+        self.model_status.setText("Local model: checking localhost…")
+        self._probe = _ProbeThread()
+        self._probe.probed.connect(self._on_model_probed)
+        self._probe.start()
+
+    def _on_model_probed(self, state):
+        self._model_state = state
+        if state.get("available"):
+            self.model_status.setText(
+                f"Local model: connected ({state.get('model', '')}).")
+        elif state.get("running"):
+            self.model_status.setText(
+                "Local model: Ollama is running but no model is pulled. "
+                "Run `ollama pull llama3.1` once, or use Template patterns.")
+        else:
+            self.model_status.setText(
+                "Local model: unavailable (offline is fine). "
+                "Start it with `ollama serve`, or use Template patterns.")
 
     def _on_failed(self, message):
         self.generate_btn.setEnabled(True)
