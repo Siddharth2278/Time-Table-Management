@@ -145,15 +145,71 @@ def _windows_for_day(slots: List[Tuple[int, int]], duration: int) -> List[Tuple[
     return sorted(out)
 
 
+def _overlaps(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
+    """Project overlap rule: existingStart < newEnd and existingEnd > newStart."""
+    return a_start < b_end and a_end > b_start
+
+
+def _busy_maps(rows: List[LectureRow]):
+    """Per-teacher / per-room busy intervals: {(name, day_index): [(start, end)]}."""
+    teacher_busy: Dict[tuple, list] = {}
+    room_busy: Dict[tuple, list] = {}
+    day_busy: Dict[int, list] = {}
+    for r in rows:
+        try:
+            day_index = _day_index(r.day)
+            start, end = time_to_minutes(r.start), time_to_minutes(r.end)
+        except (ValueError, AttributeError, TypeError):
+            continue
+        if day_index < 0 or end <= start:
+            continue
+        teacher = (r.teacher or "").strip()
+        room = (r.room or "").strip()
+        if teacher:
+            teacher_busy.setdefault((teacher, day_index), []).append((start, end))
+        if room:
+            room_busy.setdefault((room, day_index), []).append((start, end))
+        day_busy.setdefault(day_index, []).append((start, end))
+    return teacher_busy, room_busy, day_busy
+
+
+def _slot_free(busy: Dict[tuple, list], key: tuple, start: int, end: int) -> bool:
+    return not any(_overlaps(start, end, b_start, b_end)
+                   for b_start, b_end in busy.get(key, []))
+
+
 def build_dataset(rows: List[LectureRow], slots: List[Tuple[int, int]] | None = None,
                   day_load: Dict[int, int] | None = None,
                   teacher_share: Dict[str, float] | None = None,
                   room_share: Dict[str, float] | None = None,
-                  negatives_per_positive: int = NEGATIVES_PER_POSITIVE):
+                  negatives_per_positive: int = NEGATIVES_PER_POSITIVE,
+                  breaks: List[Tuple[int, int]] | None = None,
+                  strict_negatives: bool = True,
+                  valid_days: set | None = None,
+                  exclude_global_overlap: bool = True):
     """Build (X, y, meta) supervised examples from historical rows.
 
     slots = [(start_min, end_min)] teaching windows (breaks excluded).
+    breaks = [(start_min, end_min)] excluded periods (optional extra guard).
+    valid_days = allowed weekday indexes (default Mon-Sat, plus Sunday only
+    when history itself uses Sunday, so an unavailable Sunday is never
+    mislabelled as a "rejected alternative").
+    With strict_negatives (default), a negative cell is only used when it is
+    a genuine alternative scheduling choice:
+
+    - not already used by the same subject (exact day/start match);
+    - the subject's own teacher AND room are both free there (covers
+      "occupied by another teacher/room" via shared-resource double booking);
+    - no lecture at all overlaps there on that day (covers "occupied by
+      another semester", even with different staff/room);
+    - it does not overlap a break/unavailable window;
+    - the window fits the subject duration inside the teaching slots
+      (duration-incompatible cells never enter the candidate list);
+    - the day is in valid_days (unavailable days never become negatives).
+
     Returns X (list of float vectors), y (1/0), meta dict with counts.
+    Extra meta keys (skipped_occupied, skipped_unavailable) are additive;
+    positives/negatives/subjects/skipped_busy keep their existing meaning.
     """
     slots = slots or [(9 * 60, 17 * 60)]
     day_load = day_load or {}
@@ -162,9 +218,17 @@ def build_dataset(rows: List[LectureRow], slots: List[Tuple[int, int]] | None = 
     by_code: Dict[str, List[LectureRow]] = {}
     for row in rows:
         by_code.setdefault(row.code.strip(), []).append(row)
+    teacher_busy, room_busy, day_busy = _busy_maps(rows)
+    breaks = breaks or []
+    if valid_days is None:
+        observed = set(day_busy)
+        valid_days = set(range(7)) if 6 in observed else set(range(6))
+    else:
+        valid_days = set(valid_days)
     X: List[List[float]] = []
     y: List[int] = []
-    positives = negatives = 0
+    positives = negatives = skipped_busy = 0
+    skipped_occupied = skipped_unavailable = 0
     for code, group in sorted(by_code.items()):
         role = _role_stats(group)
         used = set()
@@ -199,10 +263,34 @@ def build_dataset(rows: List[LectureRow], slots: List[Tuple[int, int]] | None = 
             index_to_name = {v: k for k, v in WEEKDAY_ORDER.items()}
             cells = []
             made = 0
+            teacher = (row.teacher or "").strip()
+            room = (row.room or "").strip()
             for day_i in range(7):
                 for start, end in _windows_for_day(slots, row.duration):
                     if (day_i, start) in used:
                         continue
+                    if strict_negatives:
+                        if day_i not in valid_days:
+                            skipped_unavailable += 1
+                            continue
+                        busy = False
+                        if teacher and not _slot_free(
+                                teacher_busy, (teacher, day_i), start, end):
+                            busy = True
+                        if room and not _slot_free(
+                                room_busy, (room, day_i), start, end):
+                            busy = True
+                        if any(_overlaps(start, end, b_start, b_end)
+                               for b_start, b_end in breaks):
+                            busy = True
+                        if busy:
+                            skipped_busy += 1
+                            continue
+                        if exclude_global_overlap and any(
+                                _overlaps(start, end, b_start, b_end)
+                                for b_start, b_end in day_busy.get(day_i, [])):
+                            skipped_occupied += 1
+                            continue
                     same_day = 1 if day_i == day_index else 0
                     same_time = 1 if start == start_min else 0
                     cells.append((0 if same_day else (1 if same_time else 2),
@@ -219,7 +307,9 @@ def build_dataset(rows: List[LectureRow], slots: List[Tuple[int, int]] | None = 
                 made += 1
             negatives += made
     meta = {"positives": positives, "negatives": negatives,
-            "subjects": len(by_code)}
+            "subjects": len(by_code), "skipped_busy": skipped_busy,
+            "skipped_occupied": skipped_occupied,
+            "skipped_unavailable": skipped_unavailable}
     if positives == 0:
         raise LearningError("No usable lectures found for training.")
     return X, y, meta

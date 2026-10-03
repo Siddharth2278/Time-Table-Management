@@ -110,8 +110,13 @@ def test_dataset_creation_and_schema(tmp_path):
                                  "end", "teacher", "room")} |
             {"duration": int(r["duration"])}) for r in rows])
     assert meta["positives"] == 7
-    assert meta["negatives"] == 7 * 3
-    assert len(X) == len(y) == 28
+    # Strict negatives exclude genuinely-occupied cells (global overlap with
+    # another lecture, e.g. 09:00-11:00 overlapping 10:00-11:00) and the
+    # unavailable Sunday, so 19 < 21 here. API preserved; counts stay sane.
+    assert meta["negatives"] == 19
+    assert meta["skipped_occupied"] > 0
+    assert meta["skipped_unavailable"] > 0
+    assert len(X) == len(y) == 7 + 19
     assert all(len(row) == len(FEATURES_V1) for row in X)
 
 
