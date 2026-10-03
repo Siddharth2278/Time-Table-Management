@@ -180,15 +180,20 @@ class IntelligenceDialog(BaseDialog):
         self.planner_template = QRadioButton("Template patterns (offline)")
         self.planner_template.setChecked(True)
         self.planner_trained = QRadioButton("Trained Local Model")
-        self.planner_trained.setToolTip("Scores candidates with the fitted on-PC model.")
-        self.planner_local = QRadioButton("Local model plan")
+        self.planner_trained.setToolTip(
+            "Scores candidates with the fitted on-PC model "
+            "(timetable_agent_model/model.joblib). Never needs Ollama or internet.")
+        self.planner_local = QRadioButton("Optional Ollama plan")
+        self.planner_local.setToolTip(
+            "Optional explanation/planning via Ollama on this PC only "
+            "(http://127.0.0.1:11434). Never required for the trained model.")
         self.planner_local.toggled.connect(self._refresh_model_status)
         planner_row.addWidget(self.planner_template)
         planner_row.addWidget(self.planner_trained)
         planner_row.addWidget(self.planner_local)
         planner_row.addStretch()
         grid.addLayout(planner_row)
-        self.model_status = QLabel("Local model: not checked.")
+        self.model_status = QLabel("Optional Ollama planner: not checked. Trained Local Model works offline.")
         self.model_status.setObjectName("Muted")
         self.model_status.setWordWrap(True)
         grid.addWidget(self.model_status)
@@ -318,8 +323,9 @@ class IntelligenceDialog(BaseDialog):
                 f"model v{state.get('model_version', '?')}.")
         else:
             self.train_status.setText(
-                "Training status: not trained. Train the timetable agent using "
-                "previous timetable data to enable personalized generation.")
+                "Timetable Agent not trained. "
+                "Import previous timetable data and train the local agent "
+                "to personalize timetable generation.")
 
     def _train_agent_files(self, incremental=False):
         from PySide6.QtWidgets import QFileDialog
@@ -496,19 +502,21 @@ class IntelligenceDialog(BaseDialog):
             return
         planner = self._planner()
         if planner == "local" and not self._model_state.get("available", False):
-            modal_error(self, "Local Model Unavailable",
-                        "The local model is unavailable.\n\n"
+            modal_error(self, "Ollama Planner Unavailable",
+                        "The optional Ollama planner is unavailable.\n\n"
                         f"Endpoint: {self._model_state.get('endpoint', '') or 'not checked'}\n"
                         "Start Ollama on this PC with `ollama serve`, then pull a "
                         "model once with e.g. `ollama pull llama3.1`.\n\n"
-                        "No account or API key is ever needed. Meanwhile, "
-                        "Template patterns generation below keeps working fully offline.")
+                        "No account or API key is ever needed. The Trained Local "
+                        "Model and Template patterns keep working fully offline "
+                        "and never need Ollama.")
             return
         if planner == "trained" and not self._trained_state().get("trained", False):
-            modal_error(self, "No Trained Model",
-                        "Train the timetable agent using previous timetable data "
-                        "to enable personalized generation.\n\n"
-                        "Use Train Agent below, or pick Template patterns.")
+            modal_error(self, "Timetable Agent not trained",
+                        "Import previous timetable data and train the local agent "
+                        "to personalize timetable generation.\n\n"
+                        "Use Train Agent below (works fully offline, no Ollama "
+                        "needed), or pick Template patterns.")
             return
         self._result = None
         self.result_box.setVisible(False)
@@ -555,7 +563,7 @@ class IntelligenceDialog(BaseDialog):
                 return
         except Exception:
             pass
-        self.model_status.setText("Local model: checking localhost…")
+        self.model_status.setText("Optional Ollama planner: checking localhost…")
         self._probe = _ProbeThread()
         self._probe.probed.connect(self._on_model_probed)
         self._probe.start()
@@ -564,15 +572,18 @@ class IntelligenceDialog(BaseDialog):
         self._model_state = state
         if state.get("available"):
             self.model_status.setText(
-                f"Local model: connected ({state.get('model', '')}).")
+                f"Optional Ollama planner: connected ({state.get('model', '')}). "
+                "Trained Local Model works without it.")
         elif state.get("running"):
             self.model_status.setText(
-                "Local model: Ollama is running but no model is pulled. "
-                "Run `ollama pull llama3.1` once, or use Template patterns.")
+                "Optional Ollama planner: Ollama is running but no model is pulled. "
+                "Run `ollama pull llama3.1` once to enable it, or use the "
+                "Trained Local Model / Template patterns (offline).")
         else:
             self.model_status.setText(
-                "Local model: unavailable (offline is fine). "
-                "Start it with `ollama serve`, or use Template patterns.")
+                "Optional Ollama planner: unavailable (offline is fine). "
+                "Trained Local Model and Template patterns never need Ollama; "
+                "start it with `ollama serve` only for optional explanations.")
 
     def _on_failed(self, message):
         self.generate_btn.setEnabled(True)
