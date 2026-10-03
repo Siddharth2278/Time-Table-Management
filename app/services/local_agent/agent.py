@@ -103,12 +103,66 @@ class TimetableAgent:
             "skipped_rows": total_skipped,
         }
 
+    def _snapshot_store(self) -> Dict[str, bytes | None]:
+        """In-memory backup of model + profile files for post-train rollback."""
+        from app.services.local_agent import model_store
+        snap: Dict[str, bytes | None] = {}
+        try:
+            model_path, meta_path, dataset_path = model_store._paths(self._data_dir)
+        except Exception:
+            return snap
+        try:
+            profile_path = pattern_store.profile_path(self._data_dir)
+        except Exception:
+            profile_path = None
+        for key, path in (("model", model_path), ("meta", meta_path),
+                          ("dataset", dataset_path),
+                          ("profile", profile_path) if profile_path else ()):
+            try:
+                snap[key] = path.read_bytes() if path and path.exists() else None
+            except OSError:
+                snap[key] = None
+        snap["_model_path"] = str(model_path).encode()
+        snap["_meta_path"] = str(meta_path).encode()
+        snap["_dataset_path"] = str(dataset_path).encode()
+        if profile_path is not None:
+            snap["_profile_path"] = str(profile_path).encode()
+        return snap
+
+    def _restore_snapshot(self, snap: Dict[str, bytes | None]) -> None:
+        """Restore files captured by _snapshot_store (best effort)."""
+        import os
+        from pathlib import Path
+        mapping = {"model": "_model_path", "meta": "_meta_path",
+                   "dataset": "_dataset_path", "profile": "_profile_path"}
+        for key, path_key in mapping.items():
+            if path_key not in snap:
+                continue
+            try:
+                path = Path(snap[path_key].decode())
+            except Exception:
+                continue
+            data = snap.get(key)
+            try:
+                if data is None:
+                    if path.exists():
+                        path.unlink()
+                else:
+                    tmp = path.with_name(path.name + ".tmp")
+                    tmp.write_bytes(data)
+                    os.replace(tmp, path)
+            except OSError:
+                pass
+
     def train_agent(self, file_paths: List[str]) -> Dict[str, Any]:
         """Train (or replace-train) the fitted local model from files.
 
         Builds supervised examples, fits the classifier, validates it,
         reloads it from disk to prove persistence, and only then reports
         success. Previous working model is replaced atomically at the end.
+        Profile is rebuilt from the exact stored dataset, so model and
+        profile can never describe different data; any post-train failure
+        restores the previous files untouched.
         """
         from app.services.local_agent import model_store
         from app.services.local_agent.training_dataset import load_files_as_dicts
@@ -117,15 +171,22 @@ class TimetableAgent:
         rows, skipped, per_file = load_files_as_dicts(file_paths)
         if not rows:
             raise LearningError("No usable lecture rows found for training.")
-        report = model_store.train_from_rows(
-            rows, source_label=", ".join(str(p) for p in file_paths),
-            data_dir=self._data_dir, replace=True)
+        snap = self._snapshot_store()
+        try:
+            report = model_store.train_from_rows(
+                rows, source_label=", ".join(str(p) for p in file_paths),
+                data_dir=self._data_dir, replace=True)
+        except Exception:
+            raise
         report["files"] = [str(p) for p in file_paths]
         report["skipped_rows"] = skipped
         report["per_file"] = per_file
-        self._verify_persisted_model(report)
-        self.clear_learning_profile()
-        self.learn_files(file_paths)
+        try:
+            self._verify_persisted_model(report)
+            self._rebuild_profile_from_dataset()
+        except Exception:
+            self._restore_snapshot(snap)
+            raise
         return report
 
     def update_training(self, file_paths: List[str]) -> Dict[str, Any]:
@@ -137,15 +198,51 @@ class TimetableAgent:
         rows, skipped, per_file = load_files_as_dicts(file_paths)
         if not rows:
             raise LearningError("No usable lecture rows found for training.")
-        report = model_store.train_from_rows(
-            rows, source_label=", ".join(str(p) for p in file_paths),
-            data_dir=self._data_dir, replace=False)
+        snap = self._snapshot_store()
+        try:
+            report = model_store.train_from_rows(
+                rows, source_label=", ".join(str(p) for p in file_paths),
+                data_dir=self._data_dir, replace=False)
+        except Exception:
+            raise
         report["files"] = [str(p) for p in file_paths]
         report["skipped_rows"] = skipped
         report["per_file"] = per_file
-        self._verify_persisted_model(report)
-        self.learn_files(file_paths)
+        try:
+            self._verify_persisted_model(report)
+            self._rebuild_profile_from_dataset()
+        except Exception:
+            self._restore_snapshot(snap)
+            raise
         return report
+
+    def _rebuild_profile_from_dataset(self):
+        """Rebuild the Phase-1 profile from the exact stored training rows.
+
+        Single source of truth: profile and model.joblib always describe
+        the same dataset, so they can never drift apart.
+        """
+        from app.services.local_agent import model_store
+        from app.services.local_agent.schemas import LectureRow
+        from app.services.local_agent.timetable_learner import learn
+        rows = model_store.dataset_rows(self._data_dir)
+        lecture_rows = []
+        for raw in rows:
+            try:
+                lecture_rows.append(LectureRow(
+                    code=str(raw.get("code", "")), name=str(raw.get("name", "")),
+                    type=str(raw.get("type", "Theory") or "Theory"),
+                    duration=int(raw.get("duration", 60) or 60),
+                    day=str(raw.get("day", "")), start=str(raw.get("start", "")),
+                    end=str(raw.get("end", "")), teacher=str(raw.get("teacher", "")),
+                    room=str(raw.get("room", ""))))
+            except (TypeError, ValueError):
+                continue
+        if not lecture_rows:
+            return
+        sources = sorted({str(r.get("source", "training data")) for r in rows})
+        profile = learn(lecture_rows, source_label=", ".join(sources))
+        pattern_store.save_profile(profile, self._data_dir)
 
     def _verify_persisted_model(self, report: Dict[str, Any]):
         """Reload from disk and score one row: proves the saved model works."""

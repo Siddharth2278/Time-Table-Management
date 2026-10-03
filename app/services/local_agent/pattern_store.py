@@ -21,14 +21,22 @@ def profile_path(data_dir: Optional[Path] = None) -> Path:
 
 
 def save_profile(profile: Dict[str, Any], data_dir: Optional[Path] = None) -> Path:
-    """Persist a learned profile locally (overwrite)."""
+    """Persist a learned profile locally (overwrite, atomically)."""
+    import os
     if not isinstance(profile, dict) or profile.get("version") != PROFILE_VERSION:
         raise LearningError("Refusing to save an invalid learning profile.")
     path = profile_path(data_dir)
+    tmp = path.with_name(path.name + ".tmp")
     try:
-        with open(path, "w", encoding="utf-8") as fh:
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(profile, fh, indent=1)
+        os.replace(tmp, path)
     except OSError as e:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
         raise LearningError(f"Cannot save learning profile to '{path}': {e}")
     return path
 
