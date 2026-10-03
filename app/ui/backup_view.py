@@ -78,8 +78,11 @@ class BackupView(QWidget):
         if not path:
             return
         try:
+            from app.services.backup_service import backup_agent_data
             backup_database(get_db_path(), Path(path))
-            show_toast(self, "Backup saved.")
+            copied = backup_agent_data(Path(path))
+            extra = f" (+{len(copied)} local agent file(s): profile/trained model)" if copied else " (no trained model/profile stored yet)"
+            show_toast(self, f"Backup saved{extra}.")
         except Exception as e:
             error(self, "Backup Failed", str(e))
 
@@ -87,12 +90,19 @@ class BackupView(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Select Backup to Restore", str(Path.home()), "SQLite DB (*.db);;All Files (*.*)")
         if not path:
             return
-        if not ask(self, "Confirm Restore", "This will overwrite the current database with the backup.\n\nContinue?", ok_text="Restore", destructive=True):
+        if not ask(self, "Confirm Restore", "This will overwrite the current database with the backup.\n\nTrained model/profile beside the backup will also be restored locally (never uploaded).\n\nContinue?", ok_text="Restore", destructive=True):
             return
         try:
+            from app.services.backup_service import restore_agent_data
             # Close any open sessions? Just copy
             restore_database(get_db_path(), Path(path))
-            info(self, "Restore Complete", "Database restored successfully. Please restart the application for all views to refresh.")
+            try:
+                restored = restore_agent_data(Path(path))
+            except ValueError as e:
+                error(self, "Restore Partial", f"Database restored, but agent data failed validation:\n{e}")
+                return
+            extra = f" (+{len(restored)} agent file(s) restored locally)" if restored else " (no agent backup found beside it)"
+            info(self, "Restore Complete", f"Database restored successfully{extra}. Please restart the application for all views to refresh.")
         except Exception as e:
             error(self, "Restore Failed", str(e))
 
