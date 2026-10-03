@@ -3,6 +3,78 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 
+AGENT_BACKUP_DIRNAME = "timetable_agent_backup"
+
+
+def agent_data_files(data_dir: Path | None = None):
+    """Local agent artifacts eligible for backup: (kind, path)."""
+    from app.database import get_data_dir
+    from app.services.local_agent.pattern_store import PROFILE_FILENAME
+    from app.services.local_agent.model_store import (
+        DATASET_FILENAME, METADATA_FILENAME, MODEL_DIRNAME, MODEL_FILENAME,
+    )
+    base = Path(data_dir) if data_dir is not None else get_data_dir()
+    return [
+        ("profile", base / PROFILE_FILENAME),
+        ("model", base / MODEL_DIRNAME / MODEL_FILENAME),
+        ("model_metadata", base / MODEL_DIRNAME / METADATA_FILENAME),
+        ("training_rows", base / MODEL_DIRNAME / DATASET_FILENAME),
+    ]
+
+
+def backup_agent_data(backup_db_path: Path, data_dir: Path | None = None) -> list:
+    """Copy profile + trained model next to a database backup.
+
+    Returns the list of copied destination paths (missing sources are
+    skipped, never an error). Everything stays local.
+    """
+    dest_dir = Path(backup_db_path).parent / AGENT_BACKUP_DIRNAME
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for _kind, src in agent_data_files(data_dir):
+        if src.exists():
+            dst = dest_dir / src.name
+            shutil.copy2(str(src), str(dst))
+            copied.append(dst)
+    return copied
+
+
+def restore_agent_data(backup_db_path: Path, data_dir: Path | None = None) -> list:
+    """Restore profile + trained model from beside a database backup.
+
+    Validates the model store after copying (quarantines corruption).
+    Returns restored destination paths. Missing backup pieces are skipped.
+    """
+    from app.services.local_agent import model_store, pattern_store
+    src_dir = Path(backup_db_path).parent / AGENT_BACKUP_DIRNAME
+    restored = []
+    if not src_dir.exists():
+        return restored
+    from app.database import get_data_dir
+    base = Path(data_dir) if data_dir is not None else get_data_dir()
+    profile_name = pattern_store.PROFILE_FILENAME
+    src_profile = src_dir / profile_name
+    if src_profile.exists():
+        dst = base / profile_name
+        shutil.copy2(str(src_profile), str(dst))
+        restored.append(dst)
+    model_dir = base / model_store.MODEL_DIRNAME
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name in (model_store.MODEL_FILENAME, model_store.METADATA_FILENAME,
+                 model_store.DATASET_FILENAME):
+        src = src_dir / name
+        if src.exists():
+            shutil.copy2(str(src), str(model_dir / name))
+            restored.append(model_dir / name)
+    if restored:
+        try:
+            model_store._check_consistent(base)
+            pattern_store.load_profile(base)
+        except Exception as e:
+            raise ValueError(f"Restored agent data failed validation: {e}")
+    return restored
+
+
 def backup_database(db_path: Path, backup_path: Path):
     from sqlalchemy import text as _text  # local to avoid circulars
     backup_path.parent.mkdir(parents=True, exist_ok=True)

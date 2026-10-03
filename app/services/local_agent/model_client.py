@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
+from app.services.local_agent.netpolicy import require_local_endpoint
 from app.services.local_agent.schemas import LearningError
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434"
@@ -21,23 +22,12 @@ DEFAULT_MODEL = "llama3.1"
 
 def _ensure_local_endpoint(endpoint: str):
     """Reject anything that is not this machine. No silent remote hosts."""
-    from urllib.parse import urlparse
-    import ipaddress
     try:
-        host = (urlparse(endpoint).hostname or "").strip().lower()
-    except Exception:
-        host = ""
-    if host in ("", "localhost"):
-        return
-    try:
-        if ipaddress.ip_address(host).is_loopback:
-            return
-    except ValueError:
-        pass
-    raise LearningError(
-        f"Refusing non-local Ollama endpoint '{endpoint}'. "
-        "The local agent only talks to this PC "
-        "(http://127.0.0.1:11434 or http://localhost:11434).")
+        require_local_endpoint(endpoint, "Ollama endpoint")
+    except ValueError as e:
+        raise LearningError(
+            str(e) + " The local agent only talks to this PC "
+            "(http://127.0.0.1:11434 or http://localhost:11434).")
 
 
 class OllamaClient:

@@ -126,7 +126,9 @@ class Sidebar(QFrame):
             self.buttons[key] = btn
             layout.addWidget(btn)
         layout.addStretch()
-        self.foot = QLabel("v1.0.0 • Offline")
+        from app import __version__ as _app_version
+        self._version = _app_version
+        self.foot = QLabel(f"v{_app_version} • Offline")
         self.foot.setObjectName("SidebarFoot")
         layout.addWidget(self.foot)
         self.set_theme_icons(dark=True)
@@ -162,7 +164,7 @@ class Sidebar(QFrame):
                 w = self.layout().itemAt(i).widget()
                 if isinstance(w, QLabel) and w.objectName() == "SidebarSection":
                     w.show()
-            self.foot.setText("v1.0.0 • Offline")
+            self.foot.setText(f"v{self._version} • Offline")
 
     def select(self, key):
         for k, b in self.buttons.items():

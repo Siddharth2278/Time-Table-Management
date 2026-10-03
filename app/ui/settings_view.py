@@ -219,17 +219,23 @@ class SettingsView(QWidget):
             session.close()
 
     def backup_now(self):
+        from app.services.backup_service import backup_agent_data
         path, _ = QFileDialog.getSaveFileName(
             self, "Backup Database", str(get_data_dir() / "timetable_backup.db"), "SQLite DB (*.db)")
         if not path:
             return
         try:
             backup_database(get_db_path(), Path(path))
-            show_toast(self, "Backup saved.")
+            copied = backup_agent_data(Path(path))
+            if copied:
+                show_toast(self, f"Backup saved (+{len(copied)} agent file(s)).")
+            else:
+                show_toast(self, "Backup saved.")
         except Exception as e:
             error(self, "Backup Failed", str(e))
 
     def restore_now(self):
+        from app.services.backup_service import restore_agent_data
         path, _ = QFileDialog.getOpenFileName(
             self, "Restore Database", str(get_data_dir()), "SQLite DB (*.db)")
         if not path:
@@ -238,7 +244,11 @@ class SettingsView(QWidget):
             return
         try:
             restore_database(get_db_path(), Path(path))
-            info(self, "Restore Complete", "Database restored successfully. Please restart the application for all views to refresh.")
+            restored = restore_agent_data(Path(path))
+            if restored:
+                info(self, "Restore Complete", f"Database restored successfully ({len(restored)} agent file(s) restored). Please restart the application for all views to refresh.")
+            else:
+                info(self, "Restore Complete", "Database restored successfully. Please restart the application for all views to refresh.")
         except Exception as e:
             error(self, "Restore Failed", str(e))
 

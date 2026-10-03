@@ -13,7 +13,8 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("College Timetable Manager")
     app.setOrganizationName("CollegeTimetable")
-    app.setApplicationVersion("1.0.0")
+    from app import __version__ as _app_version
+    app.setApplicationVersion(_app_version)
 
     # Single instance: second launch warns instead of ghosting over the first
     lock_path = str(get_data_dir() / "app.lock")
