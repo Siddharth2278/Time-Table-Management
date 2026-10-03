@@ -8,6 +8,7 @@ corrupt store is quarantined aside, never silently kept.
 import datetime
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -41,6 +42,7 @@ def _utcnow() -> str:
 
 
 def _load_dataset_rows(data_dir: Optional[Path] = None) -> List[dict]:
+    """Stored training rows (the dataset model.joblib was trained on)."""
     _, _, dataset_path = _paths(data_dir)
     rows = []
     if dataset_path.exists():
@@ -55,14 +57,9 @@ def _load_dataset_rows(data_dir: Optional[Path] = None) -> List[dict]:
     return rows
 
 
-def _append_dataset_rows(new_rows: List[dict], data_dir: Optional[Path] = None):
-    _, _, dataset_path = _paths(data_dir)
-    try:
-        with open(dataset_path, "a", encoding="utf-8") as fh:
-            for row in new_rows:
-                fh.write(json.dumps(row) + "\n")
-    except OSError as e:
-        raise LearningError(f"Cannot store training data: {e}")
+def dataset_rows(data_dir: Optional[Path] = None) -> List[dict]:
+    """Public accessor for the stored training rows (profile rebuilds)."""
+    return _load_dataset_rows(data_dir)
 
 
 def _atomic_write_json(path: Path, payload: dict):
@@ -93,6 +90,22 @@ def _atomic_write_joblib(path: Path, model):
         except OSError:
             pass
         raise LearningError(f"Cannot persist trained model: {e}")
+
+
+def _restore_backups(backups: Dict[Path, Path], tmps) -> None:
+    """Remove staged tmps and put .bak files back over live files."""
+    for tmp in tmps:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+    for live, bak in backups.items():
+        try:
+            if bak.exists():
+                os.replace(bak, live)
+        except OSError:
+            pass
 
 
 def train_from_rows(rows: List[dict], source_label: str = "",
@@ -132,8 +145,7 @@ def train_from_rows(rows: List[dict], source_label: str = "",
     # genuinely span mornings, afternoons and gaps.
     X, y, meta = build_dataset(lecture_rows, slots=sorted(slot_pairs) or None)
     model, metrics = train_model(X, y)
-    model_path, meta_path, _ = _paths(data_dir)
-    _atomic_write_joblib(model_path, model)
+    model_path, meta_path, dataset_path = _paths(data_dir)
     report = {
         "model_version": MODEL_VERSION,
         "feature_schema": FEATURE_SCHEMA_VERSION,
@@ -144,19 +156,96 @@ def train_from_rows(rows: List[dict], source_label: str = "",
         "files": meta.get("files", 1),
         **metrics,
     }
-    _atomic_write_json(meta_path, report)
-    if replace:
-        _, _, dataset_path = _paths(data_dir)
+    # Truly atomic replacement: stage all three files to tmp names, back up
+    # the live files, then replace all three. Any failure restores the
+    # backups, so a crash can never leave new-model/old-dataset,
+    # new-metadata/old-model, partial jsonl or corrupt joblib behind.
+    # ponytail: group-rename via backups (not a real FS transaction);
+    # upgrade path is a write-ahead journal if cross-crash guarantees harden.
+    model_tmp = model_path.with_name(model_path.name + ".tmp")
+    meta_tmp = meta_path.with_name(meta_path.name + ".tmp")
+    dataset_tmp = dataset_path.with_name(dataset_path.name + ".tmp")
+    backups: Dict[Path, Path] = {}
+    try:
+        for live in (model_path, meta_path, dataset_path):
+            if live.exists():
+                bak = live.with_name(live.name + ".bak")
+                shutil.copy2(live, bak)
+                backups[live] = bak
         try:
-            with open(dataset_path, "w", encoding="utf-8") as fh:
+            import joblib
+            joblib.dump(model, model_tmp)
+        except Exception as e:
+            raise LearningError(f"Cannot persist trained model: {e}")
+        try:
+            with open(meta_tmp, "w", encoding="utf-8") as fh:
+                json.dump(report, fh, indent=1)
+        except OSError as e:
+            raise LearningError(f"Cannot write '{meta_path}': {e}")
+        try:
+            with open(dataset_tmp, "w", encoding="utf-8") as fh:
                 for row in combined:
                     fh.write(json.dumps(row) + "\n")
         except OSError as e:
-            raise LearningError(f"Cannot store training data: {e}")
-    else:
-        _append_dataset_rows([dict(r) for r in rows], data_dir)
+            raise LearningError(f"Cannot write '{dataset_path}': {e}")
+        os.replace(model_tmp, model_path)
+        os.replace(meta_tmp, meta_path)
+        os.replace(dataset_tmp, dataset_path)
+    except LearningError:
+        _restore_backups(backups, (model_tmp, meta_tmp, dataset_tmp))
+        raise
+    except Exception as e:
+        _restore_backups(backups, (model_tmp, meta_tmp, dataset_tmp))
+        raise LearningError(f"Training failed before anything was replaced: {e}")
+    for bak in backups.values():
+        try:
+            if bak.exists():
+                bak.unlink()
+        except OSError:
+            pass
+    try:
+        _check_consistent(data_dir)
+    except LearningError:
+        _restore_backups(backups, ())
+        raise
     report["model_path"] = str(model_path)
     return report
+
+
+def _count_dataset_lines(data_dir: Optional[Path] = None) -> int:
+    _, _, dataset_path = _paths(data_dir)
+    try:
+        with open(dataset_path, "r", encoding="utf-8") as fh:
+            return sum(1 for line in fh if line.strip())
+    except OSError:
+        return 0
+
+
+def _check_consistent(data_dir: Optional[Path] = None):
+    """Metadata lecture count must match stored dataset rows.
+
+    Raises LearningError (and quarantines) when a previous crash left a
+    mixed state, so the app never trains-or-generates from mismatched data.
+    """
+    _, meta_path, _ = _paths(data_dir)
+    try:
+        with open(meta_path, "r", encoding="utf-8") as fh:
+            metadata = json.load(fh)
+    except (OSError, ValueError):
+        return
+    if not isinstance(metadata, dict):
+        return
+    expected = metadata.get("lectures")
+    if expected is None:
+        return
+    actual = _count_dataset_lines(data_dir)
+    if actual != expected:
+        model_path, _, dataset_path = _paths(data_dir)
+        _quarantine(model_path, meta_path, dataset_path)
+        raise LearningError(
+            f"Training store is inconsistent (metadata says {expected} "
+            f"lectures, dataset has {actual} rows). Files were moved aside; "
+            "train the agent again.")
 
 
 def load_model(data_dir: Optional[Path] = None):
@@ -183,6 +272,7 @@ def load_model(data_dir: Optional[Path] = None):
         raise LearningError(
             "Stored timetable model is corrupted or from another version. "
             "It was moved aside; train the agent again.")
+    _check_consistent(data_dir)
     return model, metadata
 
 
@@ -215,6 +305,11 @@ def model_status(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     except (OSError, ValueError):
         return {"trained": False, "model_path": str(model_path),
                 "stored_rows": rows, "error": "unreadable metadata"}
+    if isinstance(metadata, dict) and metadata.get("lectures") is not None \
+            and metadata.get("lectures") != rows:
+        return {"trained": False, "model_path": str(model_path),
+                "stored_rows": rows,
+                "error": "inconsistent store (metadata/dataset mismatch)"}
     return {"trained": True, "model_path": str(model_path),
             "stored_rows": rows, **metadata}
 
