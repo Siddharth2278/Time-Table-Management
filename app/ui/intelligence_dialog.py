@@ -19,7 +19,7 @@ from app.services.intelligence.timetable_agent import (
 from app.services.local_agent.schemas import LearningError as AgentError
 from app.ui.base_dialog import BaseDialog
 from app.ui.icons import icon
-from app.ui.modals import error as modal_error
+from app.ui.modals import error as modal_error, info as modal_info
 from app.ui.widgets import show_toast
 
 STAGE_LABELS = {
@@ -52,12 +52,13 @@ class _Worker(QThread):
     def run(self):
         session = get_session()
         try:
-            if self._planner == "local":
+            if self._planner in ("local", "trained"):
                 from app.services.local_agent.agent import TimetableAgent
                 agent = TimetableAgent()
                 result = agent.generate_dry_run(
                     session, self._target_id, self._mode, self._model,
-                    progress=self.progressed.emit, avoid=self._avoid)
+                    progress=self.progressed.emit, avoid=self._avoid,
+                    planner=self._planner)
                 self.done_ok.emit({
                     "accepted": result.accepted,
                     "rejected": result.rejected,
@@ -113,6 +114,34 @@ class _ProbeThread(QThread):
                               "endpoint": "", "model": self._model or ""})
 
 
+class _TrainWorker(QThread):
+    done_ok = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, files, incremental=False):
+        super().__init__()
+        self._files = [str(p) for p in files]
+        self._incremental = incremental
+
+    def run(self):
+        from app.services.local_agent.agent import TimetableAgent
+        try:
+            agent = TimetableAgent()
+            if self._incremental:
+                report = agent.update_training(self._files)
+            else:
+                report = agent.train_agent(self._files)
+            self.done_ok.emit(report)
+        except Exception as e:
+            try:
+                from app.services.local_agent.schemas import LearningError
+                message = str(e) if isinstance(e, LearningError) else \
+                    "Training failed unexpectedly; previous model kept."
+            except Exception:
+                message = "Training failed unexpectedly; previous model kept."
+            self.failed.emit(message)
+
+
 class IntelligenceDialog(BaseDialog):
     def __init__(self, parent, target_semester_id: int, on_applied=None):
         super().__init__(parent, "Timetable Intelligence", min_width=720)
@@ -150,9 +179,12 @@ class IntelligenceDialog(BaseDialog):
         planner_row.addWidget(QLabel("Planner:"))
         self.planner_template = QRadioButton("Template patterns (offline)")
         self.planner_template.setChecked(True)
+        self.planner_trained = QRadioButton("Trained Local Model")
+        self.planner_trained.setToolTip("Scores candidates with the fitted on-PC model.")
         self.planner_local = QRadioButton("Local model plan")
         self.planner_local.toggled.connect(self._refresh_model_status)
         planner_row.addWidget(self.planner_template)
+        planner_row.addWidget(self.planner_trained)
         planner_row.addWidget(self.planner_local)
         planner_row.addStretch()
         grid.addLayout(planner_row)
@@ -161,6 +193,38 @@ class IntelligenceDialog(BaseDialog):
         self.model_status.setWordWrap(True)
         grid.addWidget(self.model_status)
         self.body_layout.addWidget(top)
+
+        train_box = QGroupBox("AI TIMETABLE AGENT")
+        train_layout = QVBoxLayout(train_box)
+        self.train_status = QLabel("Training status: checking…")
+        self.train_status.setObjectName("Muted")
+        self.train_status.setWordWrap(True)
+        train_layout.addWidget(self.train_status)
+        train_row = QHBoxLayout()
+        self.train_btn = QPushButton("Train Agent")
+        self.train_btn.setObjectName("SecondaryButton")
+        self.train_btn.setCursor(Qt.PointingHandCursor)
+        self.train_btn.setToolTip("Fit the local model on previous timetable files.")
+        self.train_btn.clicked.connect(self._train_agent_files)
+        train_row.addWidget(self.train_btn)
+        self.add_data_btn = QPushButton("Add Training Data")
+        self.add_data_btn.setObjectName("SecondaryButton")
+        self.add_data_btn.setCursor(Qt.PointingHandCursor)
+        self.add_data_btn.clicked.connect(lambda: self._train_agent_files(incremental=True))
+        train_row.addWidget(self.add_data_btn)
+        self.view_patterns_btn = QPushButton("View Learned Patterns")
+        self.view_patterns_btn.setObjectName("SecondaryButton")
+        self.view_patterns_btn.setCursor(Qt.PointingHandCursor)
+        self.view_patterns_btn.clicked.connect(self._view_learned_patterns)
+        train_row.addWidget(self.view_patterns_btn)
+        self.clear_train_btn = QPushButton("Clear Training")
+        self.clear_train_btn.setObjectName("SecondaryButton")
+        self.clear_train_btn.setCursor(Qt.PointingHandCursor)
+        self.clear_train_btn.clicked.connect(self._clear_training)
+        train_row.addWidget(self.clear_train_btn)
+        train_row.addStretch()
+        train_layout.addLayout(train_row)
+        self.body_layout.addWidget(train_box)
 
         self.ref_summary = QLabel("")
         self.ref_summary.setObjectName("InfoBar")
@@ -232,7 +296,90 @@ class IntelligenceDialog(BaseDialog):
                              "endpoint": "", "model": ""}
         self._probe = None
         self._last_accepted = []
+        self._train_worker = None
         self._refresh_model_status()
+        self._refresh_train_status()
+
+    def _trained_state(self):
+        try:
+            from app.services.local_agent.agent import TimetableAgent
+            return TimetableAgent().model_status()
+        except Exception:
+            return {"trained": False}
+
+    def _refresh_train_status(self):
+        state = self._trained_state()
+        if state.get("trained"):
+            self.train_status.setText(
+                f"Training status: ● Trained — "
+                f"{len(state.get('sources', []))} file(s), "
+                f"{state.get('lectures', 0)} lectures, "
+                f"{state.get('positives', 0)}+{state.get('negatives', 0)} samples, "
+                f"model v{state.get('model_version', '?')}.")
+        else:
+            self.train_status.setText(
+                "Training status: not trained. Train the timetable agent using "
+                "previous timetable data to enable personalized generation.")
+
+    def _train_agent_files(self, incremental=False):
+        from PySide6.QtWidgets import QFileDialog
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select Previous Timetable Files", "",
+            "Timetable files (*.csv *.json *.xlsx);;All files (*.*)")
+        if not paths:
+            return
+        for btn in (self.train_btn, self.add_data_btn, self.clear_train_btn,
+                    self.view_patterns_btn, self.generate_btn):
+            btn.setEnabled(False)
+        self._train_worker = _TrainWorker(paths, incremental)
+        self._train_worker.done_ok.connect(self._on_train_done)
+        self._train_worker.failed.connect(self._on_train_failed)
+        self._train_worker.start()
+
+    def _on_train_done(self, report):
+        for btn in (self.train_btn, self.add_data_btn, self.clear_train_btn,
+                    self.view_patterns_btn, self.generate_btn):
+            btn.setEnabled(True)
+        self._refresh_train_status()
+        show_toast(self,
+                    f"Training completed: {report.get('positives', 0)}+"
+                    f"{report.get('negatives', 0)} samples, "
+                    f"accuracy {report.get('train_accuracy', '-')}. "
+                    f"Model saved locally.")
+
+    def _on_train_failed(self, message):
+        for btn in (self.train_btn, self.add_data_btn, self.clear_train_btn,
+                    self.view_patterns_btn, self.generate_btn):
+            btn.setEnabled(True)
+        modal_error(self, "Training Failed",
+                    f"{message}\n\nPrevious working model (if any) was kept.")
+
+    def _view_learned_patterns(self):
+        from app.services.local_agent.agent import TimetableAgent
+        try:
+            profile = TimetableAgent().get_learning_profile()
+        except Exception as e:
+            modal_error(self, "Learned Patterns", str(e))
+            return
+        lines = [f"Sources: {len(profile.get('sources', []))} file(s), "
+                 f"{profile.get('total_lectures', 0)} lectures."]
+        for key in sorted((profile.get("roles", {}) or {})):
+            role = profile["roles"][key]
+            lines.append(
+                f"{key}: days {', '.join(role.get('preferred_days', [])) or '-'}; "
+                f"times {', '.join(role.get('preferred_times', [])) or '-'}; "
+                f"morning share {role.get('morning_share')}.")
+        modal_info(self, "Learned Patterns", "\n".join(lines))
+
+    def _clear_training(self):
+        from app.services.local_agent.agent import TimetableAgent
+        try:
+            removed = TimetableAgent().clear_model()
+        except Exception as e:
+            modal_error(self, "Clear Training", str(e))
+            return
+        self._refresh_train_status()
+        show_toast(self, "Training cleared." if removed else "No trained model stored.")
 
     # ---- setup ---------------------------------------------------------
     def _semester_name(self, semester_id):
@@ -335,13 +482,20 @@ class IntelligenceDialog(BaseDialog):
             return "fresh"
         return "fill"
 
+    def _planner(self):
+        if self.planner_trained.isChecked():
+            return "trained"
+        if self.planner_local.isChecked():
+            return "local"
+        return "template"
+
     def _start(self, regenerate=False):
         ref_id = self.ref_combo.currentData()
         if ref_id is None:
             modal_error(self, "Intelligence", "Select a reference timetable first.")
             return
-        use_local = self.planner_local.isChecked()
-        if use_local and not self._model_state.get("available", False):
+        planner = self._planner()
+        if planner == "local" and not self._model_state.get("available", False):
             modal_error(self, "Local Model Unavailable",
                         "The local model is unavailable.\n\n"
                         f"Endpoint: {self._model_state.get('endpoint', '') or 'not checked'}\n"
@@ -349,6 +503,12 @@ class IntelligenceDialog(BaseDialog):
                         "model once with e.g. `ollama pull llama3.1`.\n\n"
                         "No account or API key is ever needed. Meanwhile, "
                         "Template patterns generation below keeps working fully offline.")
+            return
+        if planner == "trained" and not self._trained_state().get("trained", False):
+            modal_error(self, "No Trained Model",
+                        "Train the timetable agent using previous timetable data "
+                        "to enable personalized generation.\n\n"
+                        "Use Train Agent below, or pick Template patterns.")
             return
         self._result = None
         self.result_box.setVisible(False)
@@ -365,7 +525,7 @@ class IntelligenceDialog(BaseDialog):
             avoid = None
         self._worker = _Worker(
             self._target_id, ref_id, self._mode(), ref_profile,
-            planner="local" if use_local else "template",
+            planner=self._planner(),
             model=None, avoid=avoid)
         self._worker.progressed.connect(self._mark_stage)
         self._worker.done_ok.connect(self._on_done)
