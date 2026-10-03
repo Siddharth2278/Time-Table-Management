@@ -79,11 +79,19 @@ def _validate_final(session, semester_id: int, entries: List[dict]):
 
 def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
                      progress: Optional[Callable[[str], None]] = None,
-                     ref_profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                     ref_profile: Optional[Dict[str, Any]] = None,
+                     template: Optional[Dict[str, Any]] = None,
+                     roles: Optional[Dict[int, dict]] = None,
+                     plan: Dict[tuple, int] | None = None,
+                     avoid: set | None = None) -> Dict[str, Any]:
     """Full pipeline. Writes NOTHING (rolled-back dry run).
 
     ref_profile optionally supplies an EXTERNAL reference (file import)
     instead of a database semester; ref_sem_id is then informational.
+    template/roles optionally supply a prebuilt structural template
+    (e.g. converted from a learned profile); otherwise built here.
+    plan optionally biases scoring toward local-model preferences;
+    avoid skips exact cells (regeneration). The engine still decides.
     """
     done = progress or (lambda stage: None)
     if mode not in ("fill", "fresh", "replace"):
@@ -122,9 +130,11 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
     done("constraints")
 
     patterns = extract_patterns(profile)
-    template = template_from_profile(session, profile, ref_sem_id)
-    roles = map_roles([item["subject"] for item in requirements],
-                      template.get("roles", []))
+    if template is None:
+        template = template_from_profile(session, profile, ref_sem_id)
+    if roles is None:
+        roles = map_roles([item["subject"] for item in requirements],
+                          template.get("roles", []))
     done("patterns")
 
     existing = _existing_tuples(session, target_sem_id)
@@ -167,7 +177,7 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         done("candidates")
 
         result = optimize(session, target_sem_id, units, patterns, day_names,
-                          roles, template, day_order)
+                          roles, template, day_order, plan=plan, avoid=avoid)
         # The optimizer validated every accepted entry through the engine
         # against committed state plus the flushed batch, so the finished
         # set is already authoritative. The finally-block rolls back the
@@ -200,6 +210,8 @@ def run_intelligence(session, target_sem_id: int, ref_sem_id: int, mode: str,
         + "\n\n" + pattern_lines(template),
         "similarity": similarity,
         "validations": result["validations"],
+        "plan_cells": len(plan or {}),
+        "avoid_cells": len(avoid or {}),
     }
 
 

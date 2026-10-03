@@ -58,7 +58,15 @@ def optimize(session, semester_id: int, units: List[dict],
              patterns: Dict[str, Any], day_names: Dict[int, str],
              roles: Dict[int, dict], template: dict,
              day_order: Dict[int, int],
-             budget: int = DEFAULT_BUDGET) -> Dict[str, Any]:
+             budget: int = DEFAULT_BUDGET,
+             plan: Dict[tuple, int] | None = None,
+             avoid: set | None = None) -> Dict[str, Any]:
+    """Place lecture units. Returns {accepted, unplaced, validations, complete}.
+
+    plan optionally biases scoring toward local-model preferences;
+    avoid skips exact (subject_id, day_id, start_time) cells (regeneration).
+    Neither can admit an invalid placement: the engine still decides.
+    """
     """Place lecture units. Returns {accepted, unplaced, validations, complete}."""
     context = _empty_context()
     context["day_names"] = day_names
@@ -129,8 +137,11 @@ def optimize(session, semester_id: int, units: List[dict],
         unit = work[index]
         role = roles.get(unit["subject"].id, {})
         candidates = generate_candidates(session, unit["subject"], patterns, role)
+        if avoid:
+            candidates = [c for c in candidates
+                          if (c["subject_id"], c["day_id"], c["start_time"]) not in avoid]
         scored = sorted(
-            ((score_candidate(c, unit["subject"], role, template, context),
+            ((score_candidate(c, unit["subject"], role, template, context, plan),
               c["day_id"], c["start_time"], c["teacher_id"], c["room_id"], c)
              for c in candidates),
             key=lambda t: (-t[0], t[1], t[2], t[3], t[4]))
@@ -206,6 +217,8 @@ def optimize(session, semester_id: int, units: List[dict],
                         break
                     for room_id in room_order[:2]:
                         if (subject.id, day_id, start) in used_cells:
+                            continue
+                        if avoid and (subject.id, day_id, start) in avoid:
                             continue
                         attempts += 1
                         cand = {

@@ -19,13 +19,36 @@ DEFAULT_ENDPOINT = "http://127.0.0.1:11434"
 DEFAULT_MODEL = "llama3.1"
 
 
+def _ensure_local_endpoint(endpoint: str):
+    """Reject anything that is not this machine. No silent remote hosts."""
+    from urllib.parse import urlparse
+    import ipaddress
+    try:
+        host = (urlparse(endpoint).hostname or "").strip().lower()
+    except Exception:
+        host = ""
+    if host in ("", "localhost"):
+        return
+    try:
+        if ipaddress.ip_address(host).is_loopback:
+            return
+    except ValueError:
+        pass
+    raise LearningError(
+        f"Refusing non-local Ollama endpoint '{endpoint}'. "
+        "The local agent only talks to this PC "
+        "(http://127.0.0.1:11434 or http://localhost:11434).")
+
+
 class OllamaClient:
     """Thin localhost Ollama client (chat API compatible)."""
 
     def __init__(self, endpoint: Optional[str] = None,
                  model: Optional[str] = None, timeout: int = 10):
-        self.endpoint = (endpoint or os.environ.get("LOCAL_AGENT_OLLAMA_URL")
-                         or DEFAULT_ENDPOINT).rstrip("/")
+        resolved = (endpoint or os.environ.get("LOCAL_AGENT_OLLAMA_URL")
+                    or DEFAULT_ENDPOINT).rstrip("/")
+        _ensure_local_endpoint(resolved)
+        self.endpoint = resolved
         self.model = model or os.environ.get("LOCAL_AGENT_MODEL") or DEFAULT_MODEL
         self.timeout = timeout
 

@@ -15,6 +15,12 @@ from app.services.local_agent.schemas import (
 )
 from app.utils.helpers import time_to_minutes
 
+WEEKDAY_ORDER = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+MAX_GAP_SAMPLES = 64
+
 MIN_LECTURES = 3
 
 FIELD_ALIASES = {
@@ -187,14 +193,17 @@ def learn(rows: List[LectureRow], source_label: str = "") -> Dict[str, Any]:
             "morning": morning, "afternoon": afternoon,
         })
         key = f"{kind}|{first.duration}|{len(group)}"
+        day_indexes = sorted(WEEKDAY_ORDER.get(d.lower(), 99) for d in days)
+        gaps = [b - a for a, b in zip(day_indexes, day_indexes[1:])]
         role = role_stats.setdefault(key, {
             "type": kind, "duration": first.duration, "frequency": len(group),
             "subjects": 0, "day_counts": [], "day_votes": Counter(),
             "time_votes": Counter(), "morning": 0, "afternoon": 0,
-            "adjacent_pairs": 0, "pairs_seen": 0,
+            "adjacent_pairs": 0, "pairs_seen": 0, "gaps": [],
         })
         role["subjects"] += 1
         role["day_counts"].append(len(days))
+        role["gaps"].extend(gaps[:MAX_GAP_SAMPLES - len(role["gaps"])])
         for day in days:
             role["day_votes"][day] += 1
         for time in times:
@@ -251,6 +260,8 @@ def learn(rows: List[LectureRow], source_label: str = "") -> Dict[str, Any]:
             "morning_share": round(stat["morning"] / max(1, stat["morning"] + stat["afternoon"]), 3),
             "adjacent_pair_rate": round(
                 stat["adjacent_pairs"] / max(1, stat["pairs_seen"]), 3),
+            "avg_gap": round(sum(stat["gaps"]) / len(stat["gaps"]), 2) if stat["gaps"] else 0.0,
+            "gaps": sorted(stat["gaps"]),
         }
     teacher_counts = sorted(teacher_load.values())
     room_counts = sorted(room_load.values())

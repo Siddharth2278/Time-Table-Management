@@ -113,12 +113,40 @@ _WEIGHTS = {
     "practical": 12.0, "load_balance": 10.0, "teacher_balance": 6.0,
 }
 
+PLAN_BONUS_TOP = 15.0
+PLAN_BONUS_STEP = 3.0
+
+
+def plan_bonus_for(candidate: Dict[str, Any], plan: Dict[tuple, int] | None,
+                   day_names: Dict[int, str]) -> float:
+    """Local-model guidance as a bounded bonus (validity never scores).
+
+    plan maps (subject_id, day_name, start_time) -> preference rank (1 = best).
+    Unknown cells get zero. Pure addition on top of structural scoring.
+    """
+    if not plan:
+        return 0.0
+    rank = plan.get((candidate["subject_id"],
+                     day_names.get(candidate["day_id"], ""),
+                     candidate["start_time"]))
+    if rank is None:
+        return 0.0
+    try:
+        rank = int(rank)
+    except (TypeError, ValueError):
+        return 0.0
+    if rank < 1:
+        return 0.0
+    return round(max(0.0, PLAN_BONUS_TOP - PLAN_BONUS_STEP * (rank - 1)), 3)
+
 
 def score_candidate(candidate: Dict[str, Any], subject, role: dict,
-                    template: dict, context: Dict[str, Any]) -> float:
-    """Weighted 0-100 structural score for one candidate."""
+                    template: dict, context: Dict[str, Any],
+                    plan: Dict[tuple, int] | None = None) -> float:
+    """Weighted 0-100 structural score for one candidate, plus plan bonus."""
     parts = score_breakdown(candidate, role or {}, template or {}, context)
-    return round(sum(parts[k] * _WEIGHTS[k] for k in _WEIGHTS), 3)
+    base = sum(parts[k] * _WEIGHTS[k] for k in _WEIGHTS)
+    return round(base + plan_bonus_for(candidate, plan, context.get("day_names", {})), 3)
 
 
 def timetable_similarity(placed: List[dict], template: dict,

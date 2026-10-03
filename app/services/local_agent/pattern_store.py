@@ -91,6 +91,7 @@ def update_profile(new_profile: Dict[str, Any],
         old_n = old.get("subjects_observed", 0)
         new_n = new.get("subjects_observed", 0)
         denom = max(1, old_n + new_n)
+        merged_gaps = sorted((old.get("gaps", []) or []) + (new.get("gaps", []) or []))[:64]
         roles[key] = {
             "type": new.get("type", old.get("type", "theory")),
             "duration": new.get("duration", old.get("duration", 60)),
@@ -109,6 +110,8 @@ def update_profile(new_profile: Dict[str, Any],
             "adjacent_pair_rate": round(
                 (old.get("adjacent_pair_rate", 0) * old_n
                  + new.get("adjacent_pair_rate", 0) * new_n) / denom, 3),
+            "avg_gap": round(sum(merged_gaps) / len(merged_gaps), 2) if merged_gaps else 0.0,
+            "gaps": merged_gaps,
         }
 
     def _add_counters(*maps):
