@@ -73,7 +73,9 @@ def verify_no_bundled_user_data():
     print("\n--- Verifying no pretrained user data bundled ---")
     for name in ("model.joblib", "timetable.db",
                  "timetable_learning_profile.json", "training_rows.jsonl"):
-        hits = list((ROOT / "assets").rglob(name)) if (ROOT / "assets").exists() else []
+        hits = [p for p in
+                ((ROOT / "assets").rglob(name) if (ROOT / "assets").exists() else [])
+                if "baseline_agent" not in p.parts]
         if hits:
             print(f"Refusing to bundle user data file: {hits[0]}")
             sys.exit(1)
@@ -87,6 +89,29 @@ def verify_no_bundled_user_data():
                     print(f"Spec must not bundle '{name}': {line}")
                     sys.exit(1)
     print("No pretrained model/DB bundled")
+
+
+def verify_baseline_package():
+    """Validate assets/baseline_agent when present; enforce pre-trained builds."""
+    import os
+    baseline = ROOT / "assets" / "baseline_agent"
+    manifest = baseline / "manifest.json"
+    required = os.environ.get("REQUIRE_BASELINE", "").strip() == "1"
+    if not manifest.exists():
+        if required:
+            print("REQUIRE_BASELINE=1 but assets/baseline_agent/manifest.json is missing.")
+            sys.exit(1)
+        print("Baseline: none bundled (fresh-install starts untrained).")
+        return
+    try:
+        from app.services.local_agent.baseline import validate_baseline_dir
+        info = validate_baseline_dir(baseline)
+    except Exception as e:
+        print(f"Baseline validation FAILED: {e}")
+        sys.exit(1)
+    print(f"Baseline OK: backend={info.get('backend', '?')}, "
+          f"lectures={info.get('lectures', '?')}, "
+          f"trained={info.get('trained_at', '-')}")
 
 
 def run(cmd, cwd=ROOT):
@@ -120,6 +145,7 @@ def main():
     # 1c. Pre-build guards: trained-model runtime + no bundled user data
     verify_packaged_runtime()
     verify_no_bundled_user_data()
+    verify_baseline_package()
 
     # 2. Ensure dependencies
     print("\n--- Installing dependencies ---")
