@@ -1,0 +1,24 @@
+{
+ "package_format": 1,
+ "model_version": 1,
+ "feature_schema": 4,
+ "checksums": {
+  "model.joblib": "fefd25fd1f9a0174f5aee731f159324dc62bb7cc119400f7b01c84a63be39a23",
+  "metadata.json": "fc4f39bf6827952104e81f16849d072414e4916e17a27abbc2bba64b67ce74c1",
+  "training_rows.jsonl": "6f9e7684d841f75235ecd0d454f8685979a71e28529ef68e4e72c956049df6b3",
+  "timetable_learning_profile.json": "0ebe9547f9f2f6a27aecd656cca1cd3517e80cd12a95f62abc9826a939ff4d6d"
+ },
+ "trained_at": "2026-10-07T11:13:01+00:00",
+ "lectures": 7,
+ "positives": 7,
+ "negatives": 21,
+ "backend": "sklearn-hgb",
+ "sources": [
+  "baseline-sample"
+ ],
+ "exported_at": "2026-10-07T11:13:02+00:00",
+ "compatibility": {
+  "min_app_version": "1.1.0",
+  "python": "3.x"
+ }
+}

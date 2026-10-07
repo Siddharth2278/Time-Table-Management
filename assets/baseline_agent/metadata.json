@@ -1,0 +1,33 @@
+{
+ "model_version": 1,
+ "feature_schema": 4,
+ "features": [
+  "day_index_norm",
+  "start_norm",
+  "morning",
+  "min_gap_to_same_subject",
+  "consecutive_with_same_subject",
+  "position_in_day",
+  "gap_from_break_norm",
+  "daily_load_norm",
+  "teacher_load_share",
+  "room_busy_share",
+  "day_popularity",
+  "time_popularity",
+  "morning_align"
+ ],
+ "trained_at": "2026-10-07T11:13:01+00:00",
+ "sources": [
+  "baseline-sample"
+ ],
+ "lectures": 7,
+ "files": 1,
+ "samples": 28,
+ "positives": 7,
+ "negatives": 21,
+ "backend": "sklearn-hgb",
+ "train_accuracy": 1.0,
+ "mean_positive_score": 0.9875,
+ "mean_negative_score": 0.004,
+ "separation": 0.9835
+}
