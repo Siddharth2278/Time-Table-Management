@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QPushButton, QFileDialog, QInputDialog, QFrame
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import Qt, QTime, QThread
 from PySide6.QtGui import QPixmap
 from app.database import get_session
 from app.models import Semester, WorkingDay, TimetableEntry, TimeSlot, Setting
@@ -11,6 +11,74 @@ from app.utils.helpers import time_to_minutes
 from app.ui.timetable_grid import TimetableGridWidget
 from app.ui.modals import ask, info, warn, error
 from app.ui.widgets import show_toast
+
+
+class _AdaptiveWorker(QThread):
+    """Background adaptive retrain; never blocks the timetable grid."""
+
+    def run(self):
+        try:
+            from app.services.local_agent import adaptive
+            status = adaptive.adaptive_status()
+            if status.get("background") and status.get("retrain_pending"):
+                adaptive.maybe_retrain()
+        except Exception:
+            pass
+
+
+def _record_edit_feedback(entry_id: int) -> None:
+    """Best-effort: store a validated accepted placement as feedback.
+
+    Never raises and never blocks the UI; conflict validation already
+    passed inside TimetableService, and record_feedback re-validates.
+    """
+    try:
+        from app.database import get_session as _get_session
+        from app.models import Room as _Room, Subject as _Subject
+        from app.models import Teacher as _Teacher
+        from app.models import TimetableEntry as _Entry
+        from app.models import WorkingDay as _Day
+        from app.services.local_agent import adaptive
+        session = _get_session()
+        try:
+            entry = session.query(_Entry).filter(_Entry.id == entry_id).first()
+            if entry is None:
+                return
+            subject = session.query(_Subject).filter(
+                _Subject.id == entry.subject_id).first()
+            teacher = session.query(_Teacher).filter(
+                _Teacher.id == entry.teacher_id).first()
+            room = session.query(_Room).filter(
+                _Room.id == entry.room_id).first()
+            day = session.query(_Day).filter(
+                _Day.id == entry.day_id).first()
+            if not (subject and teacher and room and day):
+                return
+            try:
+                duration = int(subject.lecture_duration or 60)
+            except (TypeError, ValueError):
+                duration = 60
+            adaptive.record_feedback([{
+                "code": subject.code, "name": subject.name,
+                "type": subject.subject_type or "Theory",
+                "duration": duration, "day": day.name,
+                "start": entry.start_time, "end": entry.end_time,
+                "teacher": teacher.name, "room": room.name,
+                "source": "manual-edit",
+            }], session=session)
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+        try:
+            status = adaptive.adaptive_status()
+            if status.get("background") and status.get("retrain_pending"):
+                _AdaptiveWorker().start()
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
 class TimetableView(QWidget):
@@ -489,6 +557,12 @@ class TimetableView(QWidget):
                     self.clear_conflict_notice()
                     show_toast(self, "Lecture updated.")
                     self.load_timetable()
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+                    _record_edit_feedback(eid)
+                    return
                 else:
                     msgs = "\n".join([c.message for c in result])
                     self.show_conflict_notice(msgs)
@@ -514,6 +588,7 @@ class TimetableView(QWidget):
                 self.clear_conflict_notice()
                 self.load_timetable()
                 show_toast(self, f"Moved to {self._days[column].name} {new_start}-{new_end}.")
+                _record_edit_feedback(entry_id)
             else:
                 msgs = "\n".join([c.message for c in result])
                 self.show_conflict_notice(msgs)
