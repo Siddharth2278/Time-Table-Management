@@ -86,7 +86,35 @@ class SettingsView(QWidget):
         intel_hint.setObjectName("Muted")
         intel_hint.setWordWrap(True)
         af_ai.addRow("", intel_hint)
+        self.ai_mode_combo = QComboBox()
+        self.ai_mode_combo.addItem("Local Only (recommended)", "local")
+        self.ai_mode_combo.addItem("Allow External AI (opt-in)", "external")
+        self.ai_mode_combo.setToolTip("Local Only: no cloud AI, no external API, timetable data never leaves this PC. "
+                                      "The trained timetable model stays local regardless.")
+        af_ai.addRow("AI Data Mode:", self.ai_mode_combo)
+        mode_hint = QLabel("Default Local Only. External mode needs explicit opt-in and shows a warning; "
+                           "no external provider is configured in this build.")
+        mode_hint.setObjectName("Muted")
+        mode_hint.setWordWrap(True)
+        af_ai.addRow("", mode_hint)
         layout.addWidget(self.group_ai)
+
+        self.group_adaptive = QGroupBox("ADAPTIVE LEARNING")
+        adf = QFormLayout(self.group_adaptive)
+        adf.setContentsMargins(16, 22, 16, 16)
+        adf.setSpacing(10)
+        self.adaptive_enabled = Switch("Adaptive learning")
+        adf.addRow("Enabled:", self.adaptive_enabled)
+        self.adaptive_min = QLineEdit()
+        self.adaptive_min.setPlaceholderText("e.g., 20")
+        adf.addRow("Minimum new examples:", self.adaptive_min)
+        self.adaptive_bg = Switch("Retrain in background")
+        adf.addRow("Background:", self.adaptive_bg)
+        self.adaptive_status = QLabel("Adaptive status: checking…")
+        self.adaptive_status.setObjectName("Muted")
+        self.adaptive_status.setWordWrap(True)
+        adf.addRow("", self.adaptive_status)
+        layout.addWidget(self.group_adaptive)
 
         self.group_backup = QGroupBox("DATA BACKUP")
         bf = QVBoxLayout(self.group_backup)
@@ -168,6 +196,27 @@ class SettingsView(QWidget):
             self.ai_reference.blockSignals(True)
             self.ai_reference.setChecked(get("ai_reference_enabled", "1") != "0")
             self.ai_reference.blockSignals(False)
+            mode = get("ai_data_mode", "local")
+            idx = self.ai_mode_combo.findData(mode if mode in ("local", "external") else "local")
+            if idx >= 0:
+                self.ai_mode_combo.setCurrentIndex(idx)
+            self.adaptive_enabled.blockSignals(True)
+            self.adaptive_enabled.setChecked(get("adaptive_enabled", "1") != "0")
+            self.adaptive_enabled.blockSignals(False)
+            self.adaptive_min.setText(get("adaptive_min_examples", "20"))
+            self.adaptive_bg.blockSignals(True)
+            self.adaptive_bg.setChecked(get("adaptive_background", "0") == "1")
+            self.adaptive_bg.blockSignals(False)
+            try:
+                from app.services.local_agent import adaptive
+                status = adaptive.adaptive_status()
+                self.adaptive_status.setText(
+                    f"Adaptive status: {status.get('pending', 0)}/{status.get('min_examples', '?')} new examples, "
+                    f"model v{status.get('model_version', '?')}, "
+                    f"last trained {status.get('trained_at', '-') or '-'}, "
+                    f"retrain {'pending' if status.get('retrain_pending') else 'not needed'}.")
+            except Exception:
+                pass
             self.info_label.setText(f"Storage: {get_data_dir()}  •  DB: {get_db_path().name}  •  Offline SQLite — survives reinstall")
         finally:
             session.close()
@@ -209,6 +258,20 @@ class SettingsView(QWidget):
             theme = self.theme_combo.currentData()
             set_key("theme", theme)
             set_key("ai_reference_enabled", "1" if self.ai_reference.isChecked() else "0")
+            mode = self.ai_mode_combo.currentData() or "local"
+            if mode == "external":
+                warn(self, "External AI Mode",
+                     "External AI mode is opt-in and no external provider is configured in this build. "
+                     "Timetable data will still never be uploaded silently; the trained model stays local.")
+            set_key("ai_data_mode", mode)
+            set_key("adaptive_enabled", "1" if self.adaptive_enabled.isChecked() else "0")
+            try:
+                min_examples = max(1, int((self.adaptive_min.text() or "20").strip()))
+            except (TypeError, ValueError):
+                warn(self, "Validation", "Minimum new examples must be a number.")
+                return
+            set_key("adaptive_min_examples", str(min_examples))
+            set_key("adaptive_background", "1" if self.adaptive_bg.isChecked() else "0")
             session.commit()
             self.themeChanged.emit(theme)
             show_toast(self, "Settings saved and theme applied.")
