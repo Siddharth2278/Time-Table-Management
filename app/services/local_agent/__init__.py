@@ -15,6 +15,17 @@ from app.services.local_agent.model_client import DEFAULT_ENDPOINT, OllamaClient
 from app.services.local_agent.model_store import (
     clear_model, dataset_rows, load_model, model_status,
 )
+from app.services.local_agent.baseline import (
+    export_baseline, export_package, find_bundled_baseline, import_package,
+    seed_active_from_baseline, validate_baseline_dir,
+)
+from app.services.local_agent.model_versions import (
+    list_versions, rollback_to_version,
+)
+from app.services.local_agent.adaptive import (
+    adaptive_config, adaptive_status, clear_feedback, maybe_retrain,
+    pending_feedback, record_feedback, training_history,
+)
 from app.services.local_agent.netpolicy import (
     check_local_endpoint, endpoint_host, is_local_host,
 )
@@ -36,9 +47,15 @@ from app.services.local_agent.timetable_learner import learn, load_rows
 __all__ = [
     "DEFAULT_ENDPOINT", "GenerationResult", "LearningError", "OllamaClient",
     "PROFILE_FILENAME", "PROFILE_VERSION", "PlanPlacement", "TimetableAgent",
-    "build_plan_prompt", "check_local_endpoint", "clear_model", "clear_profile",
-    "collect_requirements", "dataset_rows", "endpoint_host", "is_local_host",
-    "learn", "learned_to_reference", "load_model", "load_profile", "load_rows",
-    "map_requirements_to_roles", "model_status", "parse_plan", "plan_to_bias",
-    "request_plan", "save_profile", "update_profile",
+    "adaptive_config", "adaptive_status", "build_plan_prompt",
+    "check_local_endpoint", "clear_feedback", "clear_model", "clear_profile",
+    "collect_requirements", "dataset_rows", "endpoint_host",
+    "export_baseline", "export_package", "find_bundled_baseline",
+    "import_package", "is_local_host",
+    "learn", "learned_to_reference", "list_versions", "load_model",
+    "load_profile", "load_rows", "map_requirements_to_roles",
+    "maybe_retrain", "model_status", "parse_plan", "pending_feedback",
+    "plan_to_bias", "record_feedback", "request_plan",
+    "rollback_to_version", "save_profile", "seed_active_from_baseline",
+    "training_history", "update_profile", "validate_baseline_dir",
 ]
