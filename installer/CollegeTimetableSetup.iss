@@ -7,6 +7,11 @@
 ;     timetable.db, timetable_learning_profile.json,
 ;     timetable_agent_model\model.joblib|metadata.json|training_rows.jsonl
 ; - Program Files install dir is read-only at runtime; user data never lives there.
+; - Optional verified baseline agent (assets/baseline_agent/) is compiled
+;   INTO CollegeTimetable.exe via CollegeTimetable.spec datas. First launch
+;   copies it to %APPDATA%\CollegeTimetableManager\ as the active model plus
+;   a read-only recovery copy; existing APPDATA models are never overwritten
+;   and upgrades preserve database, model, feedback and backups.
 ; - No Python, no Ollama, no internet required. Ollama stays an optional
 ;   localhost planner only. Version (MyAppVersion) is stamped by build.py from
 ;   the single source of truth app/__init__.py::__version__.
