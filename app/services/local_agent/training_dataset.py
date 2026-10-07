@@ -323,28 +323,50 @@ def role_days(group: List[LectureRow]) -> List[int]:
 def load_files_as_dicts(file_paths) -> tuple:
     """Load + normalize timetable files into plain row dicts.
 
+    Structured files (.csv/.json/.xlsx-family) keep the legacy learner
+    path byte-for-byte. New formats (.xls/.pdf/images) are extracted via
+    the offline timetable_import pipeline into the same dict shape.
     Returns (rows, skipped_total, per_file) with rows as
     {code,name,type,duration,day,start,end,teacher,room,source}.
     Raises LearningError on invalid files; files with zero valid rows
     are reported (not fatal) so multi-file runs can continue.
     """
+    from app.services.timetable_import.registry import SUPPORTED_EXTENSIONS
     all_rows: List[Dict[str, Any]] = []
     skipped = 0
     per_file = []
     for path in file_paths:
-        rows, skipped_here = load_rows(str(path))
-        skipped += skipped_here
-        for row in rows:
-            all_rows.append({
+        suffix = "." + str(path).lower().rsplit(".", 1)[-1] \
+            if "." in str(path) else ""
+        if suffix in SUPPORTED_EXTENSIONS and suffix not in (
+                ".csv", ".xlsx", ".xlsm", ".xltx", ".xltm"):
+            rows, skipped_here = _load_via_importer(str(path))
+        else:
+            rows, skipped_here = load_rows(str(path))
+            rows = [{
                 "code": row.code, "name": row.name, "type": row.type,
                 "duration": row.duration, "day": row.day,
                 "start": row.start, "end": row.end,
                 "teacher": row.teacher, "room": row.room,
                 "source": str(path),
-            })
+            } for row in rows]
+        skipped += skipped_here
+        all_rows.extend(rows)
         per_file.append({"file": str(path), "rows": len(rows),
                          "skipped": skipped_here})
     return all_rows, skipped, per_file
+
+
+def _load_via_importer(path: str):
+    """New-format files -> approved records -> row dicts (sanitized source)."""
+    from pathlib import Path as _Path
+    from app.services.timetable_import.importer import TimetableImporter
+    extraction = TimetableImporter.import_file(path)
+    dicts, _approved, rejected = TimetableImporter.approved_dicts([extraction])
+    label = _Path(path).name  # basenames only; never absolute local paths.
+    for row in dicts:
+        row["source"] = label
+    return dicts, len(rejected)
 
 
 def _fmt(minutes: int) -> str:

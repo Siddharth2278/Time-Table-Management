@@ -16,8 +16,9 @@ from app.services.local_agent.model_store import (
     clear_model, dataset_rows, load_model, model_status,
 )
 from app.services.local_agent.baseline import (
-    export_baseline, export_package, find_bundled_baseline, import_package,
-    seed_active_from_baseline, validate_baseline_dir,
+    active_origin, clear_seed_info, export_baseline, export_package,
+    find_bundled_baseline, import_package, seed_active_from_baseline,
+    validate_baseline_dir, write_seed_info,
 )
 from app.services.local_agent.model_versions import (
     list_versions, rollback_to_version,
@@ -47,8 +48,9 @@ from app.services.local_agent.timetable_learner import learn, load_rows
 __all__ = [
     "DEFAULT_ENDPOINT", "GenerationResult", "LearningError", "OllamaClient",
     "PROFILE_FILENAME", "PROFILE_VERSION", "PlanPlacement", "TimetableAgent",
-    "adaptive_config", "adaptive_status", "build_plan_prompt",
+    "active_origin", "adaptive_config", "adaptive_status", "build_plan_prompt",
     "check_local_endpoint", "clear_feedback", "clear_model", "clear_profile",
+    "clear_seed_info",
     "collect_requirements", "dataset_rows", "endpoint_host",
     "export_baseline", "export_package", "find_bundled_baseline",
     "import_package", "is_local_host",
@@ -58,4 +60,5 @@ __all__ = [
     "plan_to_bias", "record_feedback", "request_plan",
     "rollback_to_version", "save_profile", "seed_active_from_baseline",
     "training_history", "update_profile", "validate_baseline_dir",
+    "write_seed_info",
 ]

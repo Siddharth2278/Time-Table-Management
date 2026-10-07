@@ -118,16 +118,30 @@ class _TrainWorker(QThread):
     done_ok = Signal(dict)
     failed = Signal(str)
 
-    def __init__(self, files, incremental=False):
+    def __init__(self, files=None, incremental=False, records=None,
+                 source_label="approved-import"):
         super().__init__()
-        self._files = [str(p) for p in files]
+        self._files = [str(p) for p in (files or [])]
         self._incremental = incremental
+        self._records = [dict(r) for r in (records or [])]
+        self._source_label = source_label
 
     def run(self):
         from app.services.local_agent.agent import TimetableAgent
         try:
             agent = TimetableAgent()
-            if self._incremental:
+            if self._records:
+                if self._incremental:
+                    from app.services.local_agent import model_store
+                    report = model_store.train_from_rows(
+                        self._records, source_label=self._source_label,
+                        data_dir=None, replace=False)
+                    agent._verify_persisted_model(report)
+                    agent._rebuild_profile_from_dataset()
+                else:
+                    report = agent.train_records(self._records,
+                                                 self._source_label)
+            elif self._incremental:
                 report = agent.update_training(self._files)
             else:
                 report = agent.train_agent(self._files)
@@ -361,15 +375,38 @@ class IntelligenceDialog(BaseDialog):
     def _refresh_baseline_status(self, state=None):
         try:
             from app.services.local_agent import adaptive
-            from app.services.local_agent.baseline import find_bundled_baseline
+            from app.services.local_agent.baseline import (
+                active_origin, find_bundled_baseline,
+            )
             status = adaptive.adaptive_status()
             bundled = find_bundled_baseline()
+            origin = active_origin().get("origin", "local")
+            quality = ""
             if (state or {}).get("trained"):
+                quality = (f"Backend {state.get('backend', '?')}, "
+                           f"separation {state.get('separation', '?')}, "
+                           f"trained in {state.get('train_seconds', '?')}s.")
+            if (state or {}).get("trained") and origin == "bundled-production-baseline":
                 self.baseline_status.setText(
-                    f"Trained Timetable Agent Ready — model v{state.get('model_version', '?')}, "
+                    f"Trained Timetable Agent Ready — current model is the bundled production baseline: "
+                    f"model v{state.get('model_version', '?')}, "
                     f"{state.get('lectures', 0)} rows, "
                     f"trained {state.get('trained_at', '-')}, "
-                    f"schema v{state.get('feature_schema', '?')}. "
+                    f"schema v{state.get('feature_schema', '?')}. {quality} "
+                    f"Feedback: {status.get('pending', 0)}/{status.get('min_examples', '?')} "
+                    f"(retrain {'pending' if status.get('retrain_pending') else 'not needed'}).")
+            elif (state or {}).get("trained") and origin == "bundled-sample-baseline":
+                self.baseline_status.setText(
+                    f"Trained Timetable Agent Ready — development sample baseline "
+                    f"(not a production model): model v{state.get('model_version', '?')}, "
+                    f"{state.get('lectures', 0)} rows. {quality} "
+                    f"Feedback: {status.get('pending', 0)}/{status.get('min_examples', '?')}.")
+            elif (state or {}).get("trained"):
+                self.baseline_status.setText(
+                    f"Trained Timetable Agent Ready — current model was trained locally on this PC: "
+                    f"model v{state.get('model_version', '?')}, "
+                    f"{state.get('lectures', 0)} rows, "
+                    f"trained {state.get('trained_at', '-')}. {quality} "
                     f"Feedback: {status.get('pending', 0)}/{status.get('min_examples', '?')} "
                     f"(retrain {'pending' if status.get('retrain_pending') else 'not needed'}).")
             elif bundled is not None:
@@ -447,13 +484,83 @@ class IntelligenceDialog(BaseDialog):
         from PySide6.QtWidgets import QFileDialog
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Previous Timetable Files", "",
-            "Timetable files (*.csv *.json *.xlsx);;All files (*.*)")
+            "Timetable files (*.csv *.json *.xlsx *.xls *.pdf *.jpg *.jpeg *.png *.webp *.bmp);;All files (*.*)")
         if not paths:
             return
+        self._analyze_and_train(paths, incremental)
+
+    def _analyze_and_train(self, paths, incremental=False):
+        """Analyze files, preview when review is needed, then train.
+
+        Pure legacy batches (.csv/.json/.xlsx-family) keep the exact
+        existing direct-train path. Batches containing new formats
+        (.xls/.pdf/images) go through offline extraction + user preview;
+        only approved rows are combined with any legacy rows and trained.
+        """
+        legacy = {".csv", ".json", ".xlsx", ".xlsm", ".xltx", ".xltm"}
+        new = [str(p) for p in paths if (
+            "." + str(p).lower().rsplit(".", 1)[-1]
+            if "." in str(p) else "") not in legacy]
+        if not new:
+            self._start_train_worker(files=paths, incremental=incremental)
+            return
+        from app.services.timetable_import.importer import TimetableImporter
+        from app.services.timetable_import.preview import (
+            records_to_lecture_dicts,
+        )
+        analyzed = TimetableImporter.analyze_files(new)
+        extractions = analyzed["extractions"]
+        if not extractions:
+            errors = analyzed["errors"]
+            modal_error(self, "Import Failed",
+                        errors[0]["error"] if errors else
+                        "No timetable data was detected in these files.")
+            return
+        from app.ui.import_preview_dialog import open_import_preview
+        approved = open_import_preview(
+            self, extractions, analyzed["reports"], analyzed["errors"])
+        if not approved:
+            return  # user cancelled or approved nothing.
+        try:
+            from app.services.local_agent.training_dataset import (
+                load_files_as_dicts,
+            )
+            legacy_paths = [str(p) for p in paths if str(p) not in new]
+            combined = records_to_lecture_dicts(approved)
+            label_parts = []
+            if legacy_paths:
+                legacy_rows, _skipped, _per = load_files_as_dicts(legacy_paths)
+                combined.extend(legacy_rows)
+                label_parts.append("training-files")
+            label_parts.append(TimetableImporter.baseline_source_label(
+                extractions))
+            try:
+                from app.services.timetable_import.preview import (
+                    save_approved_jsonl,
+                )
+                from app.services.timetable_import.validator import (
+                    validate_records,
+                )
+                all_records = []
+                for extraction in extractions:
+                    all_records.extend(extraction.records)
+                save_approved_jsonl(all_records)
+            except Exception:
+                pass
+        except Exception as e:
+            modal_error(self, "Import Failed", str(e))
+            return
+        self._start_train_worker(
+            records=combined, incremental=incremental,
+            source_label=", ".join(label_parts))
+
+    def _start_train_worker(self, files=None, incremental=False, records=None,
+                            source_label="approved-import"):
         for btn in (self.train_btn, self.add_data_btn, self.clear_train_btn,
                     self.view_patterns_btn, self.generate_btn):
             btn.setEnabled(False)
-        self._train_worker = _TrainWorker(paths, incremental)
+        self._train_worker = _TrainWorker(files or [], incremental,
+                                          records or [], source_label)
         self._train_worker.done_ok.connect(self._on_train_done)
         self._train_worker.failed.connect(self._on_train_failed)
         self._train_worker.start()

@@ -1,8 +1,10 @@
 ; Inno Setup Script for College Timetable Manager (standalone Windows desktop app)
 ; Requires Inno Setup 6.x
-; PHASE 4 guarantees baked into this script:
+; PHASE 4 guarantees baked into this script (updated Phase 8):
 ; - Installer contains ONLY the app + runtime (CollegeTimetable.exe + README).
-;   No timetable.db, no learned profile, no pretrained model.joblib is bundled.
+;   No timetable.db, no user profile, no personal model.joblib is bundled.
+;   The sole exception is an explicitly verified production baseline
+;   (assets/baseline_agent/), compiled into the EXE when present.
 ; - Each PC keeps its own data under %APPDATA%\CollegeTimetableManager\:
 ;     timetable.db, timetable_learning_profile.json,
 ;     timetable_agent_model\model.joblib|metadata.json|training_rows.jsonl
@@ -12,6 +14,10 @@
 ;   copies it to %APPDATA%\CollegeTimetableManager\ as the active model plus
 ;   a read-only recovery copy; existing APPDATA models are never overwritten
 ;   and upgrades preserve database, model, feedback and backups.
+; - Offline import runtimes (Excel/PDF/image OCR) are compiled into the EXE
+;   via hiddenimports. The Tesseract OCR binary is used from an `ocr/`
+;   folder next to the spec when present (see image_importer), otherwise
+;   from the system PATH; structured files work without it.
 ; - No Python, no Ollama, no internet required. Ollama stays an optional
 ;   localhost planner only. Version (MyAppVersion) is stamped by build.py from
 ;   the single source of truth app/__init__.py::__version__.

@@ -126,7 +126,8 @@ def load_rows(file_path: str) -> Tuple[List[LectureRow], int]:
         raw = _read_xlsx(str(file_path))
     else:
         raise LearningError(
-            f"Unsupported timetable file '{file_path}' (use .csv, .json or .xlsx).")
+            f"Unsupported timetable file '{file_path}' (use .csv, .json, "
+            ".xlsx, .xls, .pdf, .jpg, .jpeg, .png, .webp or .bmp).")
     rows: List[LectureRow] = []
     skipped = 0
     for raw_row in raw:

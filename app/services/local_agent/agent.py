@@ -115,9 +115,15 @@ class TimetableAgent:
             profile_path = pattern_store.profile_path(self._data_dir)
         except Exception:
             profile_path = None
+        try:
+            from app.services.local_agent.baseline import seed_info_path
+            seed_path = seed_info_path(self._data_dir)
+        except Exception:
+            seed_path = None
         for key, path in (("model", model_path), ("meta", meta_path),
                           ("dataset", dataset_path),
-                          ("profile", profile_path) if profile_path else ()):
+                          ("profile", profile_path) if profile_path else (),
+                          ("seedinfo", seed_path) if seed_path else ()):
             try:
                 snap[key] = path.read_bytes() if path and path.exists() else None
             except OSError:
@@ -127,6 +133,8 @@ class TimetableAgent:
         snap["_dataset_path"] = str(dataset_path).encode()
         if profile_path is not None:
             snap["_profile_path"] = str(profile_path).encode()
+        if seed_path is not None:
+            snap["_seedinfo_path"] = str(seed_path).encode()
         return snap
 
     def _restore_snapshot(self, snap: Dict[str, bytes | None]) -> None:
@@ -134,7 +142,8 @@ class TimetableAgent:
         import os
         from pathlib import Path
         mapping = {"model": "_model_path", "meta": "_meta_path",
-                   "dataset": "_dataset_path", "profile": "_profile_path"}
+                   "dataset": "_dataset_path", "profile": "_profile_path",
+                   "seedinfo": "_seedinfo_path"}
         for key, path_key in mapping.items():
             if path_key not in snap:
                 continue
@@ -184,6 +193,42 @@ class TimetableAgent:
         try:
             self._verify_persisted_model(report)
             self._rebuild_profile_from_dataset()
+            try:
+                from app.services.local_agent.baseline import clear_seed_info
+                clear_seed_info(self._data_dir)  # now locally trained.
+            except Exception:
+                pass
+        except Exception:
+            self._restore_snapshot(snap)
+            raise
+        return report
+
+    def train_records(self, rows: List[Dict[str, Any]],
+                      source_label: str = "approved-import") -> Dict[str, Any]:
+        """Train from already-normalized row dicts (e.g. approved imports).
+
+        Same atomicity, verification and profile rebuild as train_agent.
+        """
+        from app.services.local_agent import model_store
+        if not rows:
+            raise LearningError("No approved timetable records to train from.")
+        snap = self._snapshot_store()
+        try:
+            report = model_store.train_from_rows(
+                [dict(r) for r in rows], source_label=source_label,
+                data_dir=self._data_dir, replace=True)
+        except Exception:
+            raise
+        report["files"] = [source_label]
+        report["skipped_rows"] = 0
+        try:
+            self._verify_persisted_model(report)
+            self._rebuild_profile_from_dataset()
+            try:
+                from app.services.local_agent.baseline import clear_seed_info
+                clear_seed_info(self._data_dir)  # now locally trained.
+            except Exception:
+                pass
         except Exception:
             self._restore_snapshot(snap)
             raise
@@ -211,6 +256,11 @@ class TimetableAgent:
         try:
             self._verify_persisted_model(report)
             self._rebuild_profile_from_dataset()
+            try:
+                from app.services.local_agent.baseline import clear_seed_info
+                clear_seed_info(self._data_dir)  # now locally trained.
+            except Exception:
+                pass
         except Exception:
             self._restore_snapshot(snap)
             raise

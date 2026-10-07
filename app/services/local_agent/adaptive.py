@@ -241,6 +241,11 @@ def maybe_retrain(data_dir: Optional[Path] = None,
         raise
     clear_feedback(data_dir)
     report["feedback_consumed"] = len(pending)
+    try:
+        from app.services.local_agent.baseline import clear_seed_info
+        clear_seed_info(agent._data_dir)  # adapted model is now local.
+    except Exception:
+        pass
     return report
 
 

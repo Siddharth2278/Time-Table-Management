@@ -24,6 +24,8 @@ so every existing test and caller keeps working. ``baseline/``,
 """
 import hashlib
 import json
+import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -71,15 +73,47 @@ def build_manifest(files: Dict[str, Path], extra: Optional[Dict[str, Any]] = Non
     return manifest
 
 
+def _sanitize_sources(raw_sources) -> Dict[str, Any]:
+    """Release-safe source labels: basenames only, never local paths.
+
+    Absolute developer paths (which can expose usernames) are reduced to
+    file names plus a file count. Returns {"sources": [...], "source_files": n}.
+    """
+    names: List[str] = []
+    for item in raw_sources or []:
+        label = str(item or "").strip()
+        if not label:
+            continue
+        # Split multi-file labels such as "a.csv, b.csv".
+        for part in re.split(r"\s*,\s*", label):
+            part = part.strip()
+            if not part:
+                continue
+            # Strip directories, drive letters and URI prefixes.
+            part = part.replace("\\", "/")
+            name = part.rsplit("/", 1)[-1]
+            if name and name not in names:
+                names.append(name)
+    return {"sources": names, "source_files": len(names)}
+
+
 def export_baseline(data_dir: Optional[Path] = None,
-                    out_dir: Optional[Path] = None) -> Dict[str, Any]:
+                    out_dir: Optional[Path] = None,
+                    kind: str = "production") -> Dict[str, Any]:
     """Export the current ACTIVE model as a verified baseline package.
+
+    kind is "production" (trained on real college histories) or "sample"
+    (development data only; never ship as a production model). Release
+    metadata is sanitized: only file basenames and counts are recorded,
+    never absolute local paths.
 
     Validates the model is genuinely fitted (reload + score check) before
     writing anything. Returns {"out_dir": ..., "manifest": ...}.
     """
     from app.database import get_data_dir
     from app.services.local_agent import model_store, pattern_store
+    if kind not in ("production", "sample"):
+        raise LearningError("Baseline kind must be 'production' or 'sample'.")
     base = Path(data_dir) if data_dir is not None else get_data_dir()
     model_path, meta_path, dataset_path = model_store._paths(base)
     profile_path = pattern_store.profile_path(base)
@@ -99,6 +133,8 @@ def export_baseline(data_dir: Optional[Path] = None,
         __import__("app.services.local_agent.training_dataset", fromlist=["FEATURES_V1"]).FEATURES_V1)])
     if len(scores) != 1:
         raise LearningError("Active model failed a prediction check; cannot export.")
+    if int(metadata.get("lectures", 0) or 0) <= 0:
+        raise LearningError("Active model has no training data; cannot export.")
     dest = Path(out_dir) if out_dir is not None else base / "agent_seed"
     dest.mkdir(parents=True, exist_ok=True)
     mapping = {
@@ -109,15 +145,21 @@ def export_baseline(data_dir: Optional[Path] = None,
     }
     for name, src in mapping.items():
         shutil.copy2(src, dest / name)
+    sanitized = _sanitize_sources(
+        metadata.get("sources", profile.get("sources", [])))
     manifest = build_manifest(
         {name: dest / name for name in mapping},
         extra={
+            "baseline_kind": kind,
             "trained_at": metadata.get("trained_at", ""),
             "lectures": metadata.get("lectures", profile.get("total_lectures", 0)),
             "positives": metadata.get("positives", 0),
             "negatives": metadata.get("negatives", 0),
             "backend": metadata.get("backend", ""),
-            "sources": metadata.get("sources", profile.get("sources", [])),
+            "train_seconds": metadata.get("train_seconds"),
+            "separation": metadata.get("separation"),
+            "sources": sanitized["sources"],
+            "source_files": sanitized["source_files"],
             "exported_at": model_store._utcnow(),
             "compatibility": {"min_app_version": "1.1.0", "python": "3.x"},
         },
@@ -267,6 +309,11 @@ def import_package(zip_path: Path,
                  pattern_store.profile_path(base))
     shutil.rmtree(tmp, ignore_errors=True)
     model_store.load_model(base)
+    try:
+        from app.services.local_agent.baseline import clear_seed_info
+        clear_seed_info(base)  # user-imported package, not the bundled baseline.
+    except Exception:
+        pass
     return {"manifest": manifest, "restored": True}
 
 
@@ -305,6 +352,66 @@ def seed_active_from_baseline(data_dir: Optional[Path] = None,
         model_versions.snapshot_version(base, label="baseline-seed")
     except Exception:
         pass
+    write_seed_info(base, manifest)
     info = dict(manifest)
     info["seeded"] = True
     return info
+
+
+SEED_INFO_FILENAME = "seed_info.json"
+
+
+def seed_info_path(data_dir: Optional[Path] = None) -> Path:
+    from app.database import get_data_dir
+    from app.services.local_agent import model_store
+    base = Path(data_dir) if data_dir is not None else get_data_dir()
+    return model_store.model_dir(base) / SEED_INFO_FILENAME
+
+
+def write_seed_info(data_dir: Optional[Path] = None,
+                    manifest: Optional[Dict[str, Any]] = None) -> Path:
+    """Record that the active model came from the bundled baseline."""
+    from app.services.local_agent import model_store
+    path = seed_info_path(data_dir)
+    payload = {
+        "seeded_from_baseline": True,
+        "baseline_kind": (manifest or {}).get("baseline_kind", "unknown"),
+        "baseline_trained_at": (manifest or {}).get("trained_at", ""),
+        "baseline_lectures": (manifest or {}).get("lectures", 0),
+        "seeded_at": model_store._utcnow(),
+    }
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=1)
+    os.replace(tmp, path)
+    return path
+
+
+def clear_seed_info(data_dir: Optional[Path] = None) -> bool:
+    """Mark the active model as locally trained (no longer pristine baseline)."""
+    path = seed_info_path(data_dir)
+    try:
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+    except OSError:
+        return False
+
+
+def active_origin(data_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Where the active model came from: bundled baseline vs local training."""
+    path = seed_info_path(data_dir)
+    if path.is_file():
+        try:
+            info = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            info = {}
+        if info.get("seeded_from_baseline"):
+            kind = str(info.get("baseline_kind", "unknown"))
+            if kind == "production":
+                return {"origin": "bundled-production-baseline", "info": info}
+            if kind == "sample":
+                return {"origin": "bundled-sample-baseline", "info": info}
+            return {"origin": "bundled-baseline", "info": info}
+    return {"origin": "local", "info": {}}

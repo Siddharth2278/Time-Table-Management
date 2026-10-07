@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 """Build a genuinely fitted baseline agent into assets/baseline_agent/.
 
-Trains on the bundled sample history (or CSVs passed on the command line),
-validates the fitted model, and exports the verified package that the
-installer may bundle. Never writes placeholders: export fails unless the
-model reloads and scores.
+Usage:
+    python scripts/build_baseline.py file1.csv file2.xlsx timetable.jpg scanned.pdf
+
+Mixed file types are accepted (.csv/.xlsx/.xls/.pdf/.jpg/.jpeg/.png/
+.webp/.bmp): each file is detected, extracted offline into normalized
+records, validated, combined, and trained through the existing ML
+pipeline. With real historical files this produces a PRODUCTION baseline.
+With no files it trains on built-in development data and marks the package
+as a SAMPLE baseline (never ship a sample as a production model).
+
+The script loads + validates every file, trains the real local timetable
+model, rebuilds the learned profile, validates the persisted model, and
+writes metadata, checksums and manifest. It never claims success unless
+validation passes.
 """
 import sys
 import tempfile
@@ -40,15 +50,26 @@ SAMPLE = [
 
 def main() -> int:
     from app.services.local_agent import model_store
-    from app.services.local_agent.baseline import export_baseline
+    from app.services.local_agent.baseline import (
+        export_baseline, validate_baseline_dir,
+    )
     files = [a for a in sys.argv[1:] if not a.startswith("-")]
     tmp = Path(tempfile.mkdtemp(prefix="ctm-baseline-"))
+    kind = "production" if files else "sample"
     if files:
         from app.services.local_agent.training_dataset import load_files_as_dicts
-        rows, skipped, _ = load_files_as_dicts(files)
+        rows, skipped, per_file = load_files_as_dicts(files)
         print(f"Loaded {len(rows)} rows ({skipped} skipped) from {files}.")
+        for entry in per_file:
+            print(f"  {entry.get('file')}: {entry.get('rows')} rows, "
+                  f"{entry.get('skipped')} skipped.")
+        if not rows:
+            print("ERROR: no usable lecture rows found for training.")
+            return 1
     else:
         rows = SAMPLE
+        print("No files supplied: training a SAMPLE baseline on "
+              "development data (not for production release).")
     report = model_store.train_from_rows(rows, source_label="baseline",
                                          data_dir=tmp, replace=True)
     print(f"Trained: {report['positives']}+{report['negatives']} samples, "
@@ -59,14 +80,27 @@ def main() -> int:
     agent._verify_persisted_model(report)
     agent._rebuild_profile_from_dataset()
     dest = ROOT / "assets" / "baseline_agent"
-    # Fresh export: remove stale package first.
     if dest.exists():
         import shutil
         shutil.rmtree(dest)
-    info = export_baseline(tmp, dest)
-    manifest = info["manifest"]
-    print(f"Baseline exported to {dest}: {manifest.get('lectures', '?')} "
-          f"lectures, backend {manifest.get('backend', '?')}.")
+    info = export_baseline(tmp, dest, kind=kind)
+    # Independent validation of exactly what was written.
+    manifest = validate_baseline_dir(dest)
+    model_bytes = (dest / "model.joblib").stat().st_size
+    print("")
+    print(f"Files: {manifest.get('source_files', len(files) if files else 1)}")
+    print(f"Lectures: {manifest.get('lectures', '?')}")
+    print(f"Positive samples: {manifest.get('positives', '?')}")
+    print(f"Negative samples: {manifest.get('negatives', '?')}")
+    print(f"Backend: {manifest.get('backend', '?')}")
+    print(f"Training time: {report.get('train_seconds', '?')} seconds")
+    print(f"Model size: {model_bytes} bytes")
+    print(f"Separation: {manifest.get('separation', '?')}")
+    print(f"Feature schema: {manifest.get('feature_schema', '?')}")
+    print(f"Model version: {manifest.get('model_version', '?')}")
+    print(f"Baseline kind: {manifest.get('baseline_kind', '?')}")
+    print(f"Baseline status: VALID ({dest})")
+    _ = info
     return 0
 
 

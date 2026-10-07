@@ -19,16 +19,42 @@ Offline Windows desktop application for managing college timetables across 6 sem
 - **Dashboard** — stats, completion, conflicts
 - **Export** — PDF (printable), Excel, CSV
 - **Backup & Restore** — SQLite file + JSON import/export
+- **Trained Timetable Model** — learns scheduling patterns from historical
+  timetables and suggests placements; the constraint solver always validates
 - **Settings** — college, department, year, hours, backup location
 - **Offline** — SQLite local storage, no internet required
 - **Persistent Storage** — `%APPDATA%\CollegeTimetableManager\timetable.db` survives reinstalls
+
+## Training Data Formats
+
+Historical timetables can be imported as training data in these formats
+(fully offline, no cloud or API key):
+
+- CSV (row layouts and day/time grid layouts)
+- Excel `.xlsx` / `.xls` (merged cells unfolded, grids supported)
+- PDF (text/table pages read directly; scanned pages use local OCR)
+- Images `.jpg` / `.jpeg` / `.png` / `.webp` / `.bmp` (local Tesseract OCR)
+
+Image/PDF OCR runs on this PC only. Tesseract OCR is used when installed
+(see `ocr/` next to the app or `TESSERACT_CMD`); structured files work
+without it. Every import shows an extraction report with confidence, and
+only rows you approve enter the training dataset:
+
+```bash
+python scripts/build_baseline.py timetable.jpg timetable.pdf timetable.xlsx
+```
+
+The 7-lecture sample in `assets/baseline_agent/` is development data only
+and is rejected for production releases (`REQUIRE_BASELINE=1`). The real
+production model exists only after training on your actual college histories.
 
 ## Technology
 
 - Python 3.10+
 - PySide6 (Qt6) for GUI
 - SQLAlchemy + SQLite
-- openpyxl (Excel), reportlab (PDF)
+- openpyxl (Excel), reportlab (PDF), PyMuPDF (PDF import), Pillow/OpenCV (image import)
+- scikit-learn (local timetable model), Tesseract OCR via pytesseract (optional local runtime)
 - PyInstaller + Inno Setup
 
 ## Quick Start (Development)

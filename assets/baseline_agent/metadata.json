@@ -16,12 +16,13 @@
   "time_popularity",
   "morning_align"
  ],
- "trained_at": "2026-10-07T11:13:01+00:00",
+ "trained_at": "2026-10-07T11:48:53+00:00",
  "sources": [
   "baseline-sample"
  ],
  "lectures": 7,
  "files": 1,
+ "train_seconds": 8.93,
  "samples": 28,
  "positives": 7,
  "negatives": 21,

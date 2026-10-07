@@ -100,6 +100,8 @@ def verify_baseline_package():
     if not manifest.exists():
         if required:
             print("REQUIRE_BASELINE=1 but assets/baseline_agent/manifest.json is missing.")
+            print("Build a production baseline first:")
+            print("  python scripts/build_baseline.py <historical files...>")
             sys.exit(1)
         print("Baseline: none bundled (fresh-install starts untrained).")
         return
@@ -109,9 +111,42 @@ def verify_baseline_package():
     except Exception as e:
         print(f"Baseline validation FAILED: {e}")
         sys.exit(1)
-    print(f"Baseline OK: backend={info.get('backend', '?')}, "
+    # Production safety: only the 5 explicit baseline files may be bundled.
+    allowed = {"model.joblib", "metadata.json", "training_rows.jsonl",
+               "timetable_learning_profile.json", "manifest.json"}
+    extra = sorted(p.name for p in baseline.iterdir() if p.name not in allowed)
+    if extra:
+        print(f"Baseline directory contains unexpected files: {extra}")
+        sys.exit(1)
+    kind = info.get("baseline_kind", "unknown")
+    if required and kind != "production":
+        print(f"REQUIRE_BASELINE=1 but baseline kind is '{kind}' (sample).")
+        print("Rebuild from real historical timetables:")
+        print("  python scripts/build_baseline.py <historical files...>")
+        sys.exit(1)
+    print(f"Baseline OK ({kind}): backend={info.get('backend', '?')}, "
           f"lectures={info.get('lectures', '?')}, "
           f"trained={info.get('trained_at', '-')}")
+    try:
+        from app.services.timetable_import import image_importer
+        ocr = image_importer.check_ocr_available()
+        import importlib.util as _util
+        pdf_ok = bool(_util.find_spec("pymupdf") or _util.find_spec("fitz"))
+        print(f"Import formats: csv/xlsx/xls/pdf/images "
+              f"(OCR {'ready' if ocr.get('available') else 'NOT available: ' + str(ocr.get('reason', ''))}, "
+              f"PDF {'ready' if pdf_ok else 'NOT available: PyMuPDF missing'})")
+        try:
+            import PIL
+            print(f"Imaging: Pillow {PIL.__version__}", end="")
+            try:
+                import cv2
+                print(f", OpenCV {cv2.__version__}")
+            except ImportError:
+                print(" (OpenCV missing: Pillow-only preprocessing)")
+        except ImportError:
+            print("Imaging: Pillow missing (image import disabled)")
+    except Exception as e:
+        print(f"Import runtime check skipped: {e}")
 
 
 def run(cmd, cwd=ROOT):
