@@ -215,6 +215,11 @@ class Header(QFrame):
             self.export_btn.clicked.connect(export_callback)
             layout.addWidget(self.export_btn)
             self.export_btn.hide()
+        self.assistant_btn = QPushButton("Assistant")
+        self.assistant_btn.setObjectName("SecondaryButton")
+        self.assistant_btn.setToolTip("Open the AI assistant (typed chat always works; voice is optional).")
+        self.assistant_btn.setCursor(Qt.PointingHandCursor)
+        layout.addWidget(self.assistant_btn)
 
     def set_menu_icon(self, dark: bool):
         color = "#F4F7FA" if dark else "#334155"
@@ -253,6 +258,15 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         init_db()
+        try:
+            # First launch with a bundled baseline becomes immediately
+            # trained; existing installs are never touched.
+            from app.services.local_agent.baseline import (
+                seed_active_from_baseline,
+            )
+            seed_active_from_baseline()
+        except Exception:
+            pass
         central = QWidget()
         central.setObjectName("AppRoot")
         self.setCentralWidget(central)
@@ -261,6 +275,7 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         self.header = Header(toggle_callback=self.toggle_sidebar, export_callback=self.export_current_pdf)
         self.header.export_btn.setIcon(icon("download", "#FFFFFF", 16))
+        self.header.assistant_btn.clicked.connect(self.open_assistant)
         root.addWidget(self.header)
         body = QWidget()
         body.setObjectName("ContentArea")
@@ -455,6 +470,23 @@ class MainWindow(QMainWindow):
             self.timetable.export("pdf")
         except Exception:
             pass
+
+    def open_assistant(self):
+        try:
+            from app.ui.assistant_dialog import open_assistant_dialog
+            context = {}
+            try:
+                context["selected_entry_id"] = getattr(
+                    self.timetable.grid, "selected_entry_id", None)
+            except Exception:
+                pass
+            open_assistant_dialog(self, context=context)
+        except Exception as e:
+            try:
+                from app.ui.modals import error as modal_error
+                modal_error(self, "Assistant", str(e))
+            except Exception:
+                pass
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
