@@ -19,6 +19,8 @@ def agent_data_files(data_dir: Path | None = None):
         ("model", base / MODEL_DIRNAME / MODEL_FILENAME),
         ("model_metadata", base / MODEL_DIRNAME / METADATA_FILENAME),
         ("training_rows", base / MODEL_DIRNAME / DATASET_FILENAME),
+        ("model_manifest", base / MODEL_DIRNAME / "manifest.json"),
+        ("feedback", base / MODEL_DIRNAME / "feedback" / "feedback.jsonl"),
     ]
 
 
@@ -61,11 +63,17 @@ def restore_agent_data(backup_db_path: Path, data_dir: Path | None = None) -> li
     model_dir = base / model_store.MODEL_DIRNAME
     model_dir.mkdir(parents=True, exist_ok=True)
     for name in (model_store.MODEL_FILENAME, model_store.METADATA_FILENAME,
-                 model_store.DATASET_FILENAME):
+                 model_store.DATASET_FILENAME, "manifest.json"):
         src = src_dir / name
         if src.exists():
             shutil.copy2(str(src), str(model_dir / name))
             restored.append(model_dir / name)
+    feedback_src = src_dir / "feedback.jsonl"
+    if feedback_src.exists():
+        feedback_dst = model_dir / "feedback"
+        feedback_dst.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(feedback_src), str(feedback_dst / "feedback.jsonl"))
+        restored.append(feedback_dst / "feedback.jsonl")
     if restored:
         try:
             model_store._check_consistent(base)
