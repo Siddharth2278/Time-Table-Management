@@ -229,6 +229,36 @@ class IntelligenceDialog(BaseDialog):
         train_row.addWidget(self.clear_train_btn)
         train_row.addStretch()
         train_layout.addLayout(train_row)
+        self.baseline_status = QLabel("Baseline: checking…")
+        self.baseline_status.setObjectName("Muted")
+        self.baseline_status.setWordWrap(True)
+        train_layout.addWidget(self.baseline_status)
+        deploy_row = QHBoxLayout()
+        self.export_btn = QPushButton("Export Deployable Agent")
+        self.export_btn.setObjectName("SecondaryButton")
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setToolTip("Export the fitted model as a verified baseline package.")
+        self.export_btn.clicked.connect(self._export_agent)
+        deploy_row.addWidget(self.export_btn)
+        self.import_btn = QPushButton("Import Trained Agent")
+        self.import_btn.setObjectName("SecondaryButton")
+        self.import_btn.setCursor(Qt.PointingHandCursor)
+        self.import_btn.setToolTip("Import a verified agent package (model/data only).")
+        self.import_btn.clicked.connect(self._import_agent)
+        deploy_row.addWidget(self.import_btn)
+        self.update_btn = QPushButton("Update Agent")
+        self.update_btn.setObjectName("SecondaryButton")
+        self.update_btn.setCursor(Qt.PointingHandCursor)
+        self.update_btn.setToolTip("Retrain on collected feedback when the threshold is reached.")
+        self.update_btn.clicked.connect(self._update_agent)
+        deploy_row.addWidget(self.update_btn)
+        self.history_btn = QPushButton("Training History")
+        self.history_btn.setObjectName("SecondaryButton")
+        self.history_btn.setCursor(Qt.PointingHandCursor)
+        self.history_btn.clicked.connect(self._show_history)
+        deploy_row.addWidget(self.history_btn)
+        deploy_row.addStretch()
+        train_layout.addLayout(deploy_row)
         self.body_layout.addWidget(train_box)
 
         self.ref_summary = QLabel("")
@@ -326,6 +356,92 @@ class IntelligenceDialog(BaseDialog):
                 "Timetable Agent not trained. "
                 "Import previous timetable data and train the local agent "
                 "to personalize timetable generation.")
+        self._refresh_baseline_status(state)
+
+    def _refresh_baseline_status(self, state=None):
+        try:
+            from app.services.local_agent import adaptive
+            from app.services.local_agent.baseline import find_bundled_baseline
+            status = adaptive.adaptive_status()
+            bundled = find_bundled_baseline()
+            if (state or {}).get("trained"):
+                self.baseline_status.setText(
+                    f"Trained Timetable Agent Ready — model v{state.get('model_version', '?')}, "
+                    f"{state.get('lectures', 0)} rows, "
+                    f"trained {state.get('trained_at', '-')}, "
+                    f"schema v{state.get('feature_schema', '?')}. "
+                    f"Feedback: {status.get('pending', 0)}/{status.get('min_examples', '?')} "
+                    f"(retrain {'pending' if status.get('retrain_pending') else 'not needed'}).")
+            elif bundled is not None:
+                self.baseline_status.setText(
+                    "Bundled baseline available — restart the app to seed it, "
+                    "or train on Historical Timetable Data.")
+            else:
+                self.baseline_status.setText(
+                    f"Baseline: none bundled. Feedback: {status.get('pending', 0)}/"
+                    f"{status.get('min_examples', '?')}.")
+        except Exception:
+            pass
+
+    def _export_agent(self):
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Deployable Agent", "CollegeTimetableAgentPackage.zip",
+            "Agent package (*.zip)")
+        if not path:
+            return
+        try:
+            from app.services.local_agent.baseline import export_package
+            out = export_package(zip_path=path)
+            show_toast(self, f"Agent exported: {out['zip']}")
+            self._refresh_train_status()
+        except Exception as e:
+            modal_error(self, "Export Failed", str(e))
+
+    def _import_agent(self):
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Trained Agent", "", "Agent package (*.zip)")
+        if not path:
+            return
+        try:
+            from app.services.local_agent.baseline import import_package
+            import_package(path)
+            self._refresh_train_status()
+            show_toast(self, "Trained agent imported and activated.")
+        except Exception as e:
+            modal_error(self, "Import Failed", str(e))
+
+    def _update_agent(self):
+        try:
+            from app.services.local_agent import adaptive
+            report = adaptive.maybe_retrain(force=False)
+            if report is None:
+                status = adaptive.adaptive_status()
+                modal_info(self, "Update Agent",
+                           f"Not enough new examples yet: {status['pending']}/"
+                           f"{status['min_examples']}. Import timetables or "
+                           "record accepted edits first.")
+                return
+            self._refresh_train_status()
+            show_toast(self, f"Agent updated: {report.get('lectures', '?')} lectures.")
+        except Exception as e:
+            modal_error(self, "Update Failed", str(e))
+
+    def _show_history(self):
+        try:
+            from app.services.local_agent import adaptive
+            history = adaptive.training_history()
+            lines = [f"Pending feedback: {history['status'].get('pending', 0)}, "
+                     f"model v{history['status'].get('model_version', '?')}, "
+                     f"last trained {history['status'].get('trained_at', '-') or '-'}."]
+            for entry in history.get("versions", [])[-10:]:
+                lines.append(f"{entry.get('version')}: "
+                             f"{entry.get('label', '')} "
+                             f"{entry.get('trained_at', '')}".strip())
+            modal_info(self, "Training History", "\n".join(lines))
+        except Exception as e:
+            modal_error(self, "Training History", str(e))
 
     def _train_agent_files(self, incremental=False):
         from PySide6.QtWidgets import QFileDialog
@@ -653,6 +769,10 @@ class IntelligenceDialog(BaseDialog):
                 return
             show_toast(self, f"Applied {out.get('applied', 0)} lecture(s).")
             try:
+                self._record_applied_feedback()
+            except Exception:
+                pass
+            try:
                 if callable(self._on_applied):
                     self._on_applied()
             except Exception:
@@ -663,6 +783,48 @@ class IntelligenceDialog(BaseDialog):
                 session.close()
             except Exception:
                 pass
+
+    def _record_applied_feedback(self):
+        """Best-effort: accepted conflict-free schedules become feedback."""
+        try:
+            from app.models import Room, Subject, Teacher, WorkingDay
+            from app.services.local_agent import adaptive
+            session = get_session()
+            try:
+                rows = []
+                for item in (self._result or {}).get("accepted", []):
+                    sub = session.query(Subject).filter(
+                        Subject.id == item.get("subject_id")).first()
+                    tea = session.query(Teacher).filter(
+                        Teacher.id == item.get("teacher_id")).first()
+                    roo = session.query(Room).filter(
+                        Room.id == item.get("room_id")).first()
+                    day = session.query(WorkingDay).filter(
+                        WorkingDay.id == item.get("day_id")).first()
+                    if not (sub and tea and roo and day):
+                        continue
+                    try:
+                        duration = int(sub.lecture_duration or 60)
+                    except (TypeError, ValueError):
+                        duration = 60
+                    rows.append({
+                        "code": sub.code, "name": sub.name,
+                        "type": sub.subject_type or "Theory",
+                        "duration": duration, "day": day.name,
+                        "start": item.get("start_time", ""),
+                        "end": item.get("end_time", ""),
+                        "teacher": tea.name, "room": roo.name,
+                        "source": "accepted-schedule",
+                    })
+                if rows:
+                    adaptive.record_feedback(rows, session=session)
+            finally:
+                try:
+                    session.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def closeEvent(self, event):
         try:
