@@ -143,8 +143,11 @@ def train_from_rows(rows: List[dict], source_label: str = "",
             continue
     # Slot grid from observed times (not one giant block): negatives then
     # genuinely span mornings, afternoons and gaps.
+    import time as _time
+    _train_start = _time.perf_counter()
     X, y, meta = build_dataset(lecture_rows, slots=sorted(slot_pairs) or None)
     model, metrics = train_model(X, y)
+    train_seconds = round(_time.perf_counter() - _train_start, 2)
     model_path, meta_path, dataset_path = _paths(data_dir)
     report = {
         "model_version": MODEL_VERSION,
@@ -154,6 +157,7 @@ def train_from_rows(rows: List[dict], source_label: str = "",
         "sources": sorted({str(r.get("source", source_label or "unknown")) for r in combined}),
         "lectures": len(combined),
         "files": meta.get("files", 1),
+        "train_seconds": train_seconds,
         **metrics,
     }
     # Truly atomic replacement: stage all three files to tmp names, back up
@@ -208,6 +212,10 @@ def train_from_rows(rows: List[dict], source_label: str = "",
     except LearningError:
         _restore_backups(backups, ())
         raise
+    try:
+        report["model_bytes"] = model_path.stat().st_size
+    except OSError:
+        report["model_bytes"] = 0
     report["model_path"] = str(model_path)
     return report
 
