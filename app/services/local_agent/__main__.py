@@ -174,6 +174,60 @@ def _cmd_clear_model(agent, args):
     return 0
 
 
+def _cmd_export_agent(agent, args):
+    try:
+        from app.services.local_agent.baseline import export_package
+        out = export_package(zip_path=getattr(args, "output", None) or None)
+    except LearningError as e:
+        print(f"Error: {e}")
+        return 1
+    print(f"Agent package exported: {out['zip']}")
+    return 0
+
+
+def _cmd_import_agent(agent, args):
+    try:
+        from app.services.local_agent.baseline import import_package
+        import_package(args.package)
+    except LearningError as e:
+        print(f"Error: {e}")
+        return 1
+    print("Trained agent imported and activated.")
+    return 0
+
+
+def _cmd_baseline_seed(agent, args):
+    try:
+        from app.services.local_agent.baseline import seed_active_from_baseline
+        info = seed_active_from_baseline()
+    except LearningError as e:
+        print(f"Error: {e}")
+        return 1
+    if info is None:
+        print("Nothing to seed (active model exists or no baseline bundled).")
+    else:
+        print(f"Baseline seeded: {info.get('lectures', '?')} lectures, "
+              f"backend {info.get('backend', '?')}.")
+    return 0
+
+
+def _cmd_history(agent, args):
+    try:
+        from app.services.local_agent import adaptive
+        history = adaptive.training_history()
+    except LearningError as e:
+        print(f"Error: {e}")
+        return 1
+    status = history.get("status", {})
+    print(f"Pending: {status.get('pending', 0)}, "
+          f"model v{status.get('model_version', '?')}, "
+          f"trained {status.get('trained_at', '-') or '-'}.")
+    for entry in history.get("versions", []):
+        print(f"  {entry.get('version')}: {entry.get('label', '')} "
+              f"{entry.get('trained_at', '')}".rstrip())
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="python -m app.services.local_agent",
@@ -204,6 +258,13 @@ def main(argv=None):
     update_parser.add_argument("files", nargs="+", help="CSV, XLSX or JSON timetables")
     sub.add_parser("model-status", help="Show trained model status")
     sub.add_parser("clear-model", help="Delete the trained model")
+    export_parser = sub.add_parser("export-agent", help="Export verified baseline agent package")
+    export_parser.add_argument("--output", default=None,
+                               help="Output zip path (default CollegeTimetableAgentPackage.zip)")
+    import_parser = sub.add_parser("import-agent", help="Import a verified agent package")
+    import_parser.add_argument("package", help="Agent package zip file")
+    sub.add_parser("baseline-seed", help="Seed active model from bundled baseline")
+    sub.add_parser("history", help="Show model versions and adaptive status")
     args = parser.parse_args(argv)
     agent = _agent(args)
     try:
@@ -225,6 +286,14 @@ def main(argv=None):
             return _cmd_model_status(agent, args)
         if args.command == "clear-model":
             return _cmd_clear_model(agent, args)
+        if args.command == "export-agent":
+            return _cmd_export_agent(agent, args)
+        if args.command == "import-agent":
+            return _cmd_import_agent(agent, args)
+        if args.command == "baseline-seed":
+            return _cmd_baseline_seed(agent, args)
+        if args.command == "history":
+            return _cmd_history(agent, args)
     except LearningError as e:
         print(f"Error: {e}")
         return 1
